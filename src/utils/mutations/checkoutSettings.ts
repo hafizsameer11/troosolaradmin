@@ -11,6 +11,7 @@ export type CheckoutSettingsPayload = {
   vat_percentage?: number;
   insurance_fee_percentage?: number;
   installation_flat_addon?: number;
+  installation_materials_cost?: number;
   installation_schedule_working_days?: number;
   installation_description?: string;
 };

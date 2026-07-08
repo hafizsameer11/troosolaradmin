@@ -34,6 +34,7 @@ const CheckoutShopSettings = () => {
       vat_percentage: settings.vat_percentage ?? 7.5,
       insurance_fee_percentage: settings.insurance_fee_percentage ?? 3,
       installation_flat_addon: settings.installation_flat_addon ?? 0,
+      installation_materials_cost: settings.installation_materials_cost ?? 0,
       installation_schedule_working_days:
         settings.installation_schedule_working_days,
       installation_description: settings.installation_description ?? "",
@@ -204,6 +205,23 @@ const CheckoutShopSettings = () => {
                 setForm((f) => ({
                   ...f,
                   installation_flat_addon: Number(e.target.value),
+                }))
+              }
+            />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="text-sm font-medium text-gray-700">
+              Installation materials cost (₦) — Own Installer optional checkbox (battery / inverter / panels)
+            </span>
+            <input
+              type="number"
+              min={0}
+              className="mt-1 w-full max-w-xs border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              value={form.installation_materials_cost ?? ""}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  installation_materials_cost: Number(e.target.value),
                 }))
               }
             />
