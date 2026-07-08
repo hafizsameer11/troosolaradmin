@@ -185,9 +185,9 @@ const CheckoutShopSettings = () => {
             </p>
             <p className="text-xs text-gray-600 mt-1">
               Set separately for each category. Installation applies for TrooSolar
-              installer. Inspection applies for both TrooSolar and Own Installer.
-              Materials apply when Own Installer checks “Include Cost of Installation
-              Materials”.
+              installer. Inspection applies for TrooSolar always; for Own Installer
+              only when they check “Include Cost of Installation Materials”
+              (with materials fee).
             </p>
           </div>
 
