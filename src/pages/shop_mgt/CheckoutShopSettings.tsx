@@ -184,9 +184,10 @@ const CheckoutShopSettings = () => {
               Product-only fees (Battery / Inverter / Solar panels)
             </p>
             <p className="text-xs text-gray-600 mt-1">
-              Set separately for each category. Installation &amp; Inspection
-              apply for TrooSolar installer. Materials apply when Own Installer
-              checks “Include Cost of Installation Materials”.
+              Set separately for each category. Installation applies for TrooSolar
+              installer. Inspection applies for both TrooSolar and Own Installer.
+              Materials apply when Own Installer checks “Include Cost of Installation
+              Materials”.
             </p>
           </div>
 
