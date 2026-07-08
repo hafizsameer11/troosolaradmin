@@ -33,6 +33,7 @@ const CheckoutShopSettings = () => {
       category_installation_fees: settings.category_installation_fees || {},
       category_materials_fees: settings.category_materials_fees || {},
       category_inspection_fees: settings.category_inspection_fees || {},
+      own_installer_include_inspection: !!settings.own_installer_include_inspection,
       delivery_min_working_days: settings.delivery_min_working_days,
       delivery_max_working_days: settings.delivery_max_working_days,
       insurance_fee: settings.insurance_fee,
@@ -185,11 +186,34 @@ const CheckoutShopSettings = () => {
             </p>
             <p className="text-xs text-gray-600 mt-1">
               Set separately for each category. Installation applies for TrooSolar
-              installer. Inspection applies for TrooSolar always; for Own Installer
-              only when they check “Include Cost of Installation Materials”
-              (with materials fee).
+              installer. Inspection always applies for TrooSolar. For Own Installer,
+              enable the option below if you also want inspection charged when they
+              check “Include Cost of Installation Materials”.
             </p>
           </div>
+
+          <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-[#F5F7FF] p-3 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 text-[#273E8E] border-gray-300 rounded"
+              checked={!!form.own_installer_include_inspection}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  own_installer_include_inspection: e.target.checked,
+                }))
+              }
+            />
+            <span className="text-sm text-gray-800">
+              <span className="font-medium">
+                Charge inspection fee for Own Installer
+              </span>
+              <span className="block text-xs text-gray-600 mt-0.5">
+                Only applies when the customer checks “Include Cost of Installation
+                Materials”. Uses each category’s Inspection fee amount above.
+              </span>
+            </span>
+          </label>
 
           {productOnlyCategories.map((cat) => (
             <div
