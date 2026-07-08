@@ -8,6 +8,8 @@ import {
 } from "../../utils/mutations/checkoutSettings";
 import LoadingSpinner from "../../components/common/LoadingSpinner";
 
+const PRODUCT_ONLY_KEYS = ["battery-only", "inverter-only", "panels-only"];
+
 const CheckoutShopSettings = () => {
   const token = Cookies.get("token") || "";
   const queryClient = useQueryClient();
@@ -28,6 +30,9 @@ const CheckoutShopSettings = () => {
     setForm({
       delivery_fee: settings.delivery_fee,
       category_delivery_fees: settings.category_delivery_fees || {},
+      category_installation_fees: settings.category_installation_fees || {},
+      category_materials_fees: settings.category_materials_fees || {},
+      category_inspection_fees: settings.category_inspection_fees || {},
       delivery_min_working_days: settings.delivery_min_working_days,
       delivery_max_working_days: settings.delivery_max_working_days,
       insurance_fee: settings.insurance_fee,
@@ -58,6 +63,34 @@ const CheckoutShopSettings = () => {
     mutation.mutate(form);
   };
 
+  const updateCategoryFee = (
+    mapKey:
+      | "category_delivery_fees"
+      | "category_installation_fees"
+      | "category_materials_fees"
+      | "category_inspection_fees",
+    catKey: string,
+    value: number
+  ) => {
+    setForm((f) => ({
+      ...f,
+      [mapKey]: {
+        ...((f[mapKey] as Record<string, number> | undefined) ||
+          (settings?.[mapKey] as Record<string, number> | undefined) ||
+          {}),
+        [catKey]: value,
+      },
+    }));
+  };
+
+  const productCategories = (settings?.product_categories || []) as {
+    key: string;
+    label: string;
+  }[];
+  const productOnlyCategories = productCategories.filter((c) =>
+    PRODUCT_ONLY_KEYS.includes(c.key)
+  );
+
   if (!token) {
     return (
       <p className="text-sm text-gray-600">Please sign in to manage checkout.</p>
@@ -81,20 +114,22 @@ const CheckoutShopSettings = () => {
   }
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-3xl">
       <p className="text-sm text-gray-600 mb-6">
-        These values drive cart checkout and Buy Now / BNPL flows: VAT %, delivery
-        fees (global default and per product category), delivery window, insurance
-        as a % of (items + installation) when installation is selected, optional
-        flat shop add-on on top of per-product installation, installation lead time,
-        and the installation notice shown in the cart.
+        Configure Buy Now / BNPL fees. Bundles use Bundle Mgt → Invoice fees.
+        Battery only / Inverter only / Solar panels only use the per-category
+        product fees below.
       </p>
 
-      <form onSubmit={handleSubmit} className="space-y-5 bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-5 bg-white rounded-2xl border border-gray-200 p-6 shadow-sm"
+      >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <label className="block sm:col-span-2">
             <span className="text-sm font-medium text-gray-700">
-              Default delivery fee (₦) — shop cart &amp; fallback when a category fee is not set
+              Default delivery fee (₦) — shop cart &amp; fallback when a category
+              fee is not set
             </span>
             <input
               type="number"
@@ -113,51 +148,129 @@ const CheckoutShopSettings = () => {
 
         <div className="rounded-xl border border-[#273E8E]/15 bg-[#F5F7FF] p-4 space-y-3">
           <p className="text-sm font-semibold text-gray-900">
-            Buy Now / BNPL delivery fee by product category
-          </p>
-          <p className="text-xs text-gray-600">
-            Set a delivery fee for each solution type (e.g. full solar kit vs battery only).
-            Used when the bundle has no embedded delivery fee and no state/location override applies.
+            Delivery fee by product category
           </p>
           <div className="grid grid-cols-1 gap-3">
-            {(settings.product_categories || []).map(
-              (cat: { key: string; label: string }) => (
-                <label key={cat.key} className="block">
-                  <span className="text-sm font-medium text-gray-700">
-                    {cat.label}
+            {productCategories.map((cat) => (
+              <label key={cat.key} className="block">
+                <span className="text-sm font-medium text-gray-700">
+                  {cat.label}
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  className="mt-1 w-full max-w-xs border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  value={
+                    form.category_delivery_fees?.[cat.key] ??
+                    settings.category_delivery_fees?.[cat.key] ??
+                    ""
+                  }
+                  onChange={(e) =>
+                    updateCategoryFee(
+                      "category_delivery_fees",
+                      cat.key,
+                      Number(e.target.value)
+                    )
+                  }
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-[#273E8E]/15 bg-white p-4 space-y-4">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">
+              Product-only fees (Battery / Inverter / Solar panels)
+            </p>
+            <p className="text-xs text-gray-600 mt-1">
+              Set separately for each category. Installation &amp; Inspection
+              apply for TrooSolar installer. Materials apply when Own Installer
+              checks “Include Cost of Installation Materials”.
+            </p>
+          </div>
+
+          {productOnlyCategories.map((cat) => (
+            <div
+              key={cat.key}
+              className="rounded-lg border border-gray-200 p-3 space-y-3"
+            >
+              <p className="text-sm font-semibold text-[#273E8E]">{cat.label}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <label className="block">
+                  <span className="text-xs font-medium text-gray-700">
+                    Installation fee (₦)
                   </span>
                   <input
                     type="number"
                     min={0}
-                    className="mt-1 w-full max-w-xs border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                     value={
-                      form.category_delivery_fees?.[cat.key] ??
-                      settings.category_delivery_fees?.[cat.key] ??
+                      form.category_installation_fees?.[cat.key] ??
+                      settings.category_installation_fees?.[cat.key] ??
                       ""
                     }
                     onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        category_delivery_fees: {
-                          ...(f.category_delivery_fees ||
-                            settings.category_delivery_fees ||
-                            {}),
-                          [cat.key]: Number(e.target.value),
-                        },
-                      }))
+                      updateCategoryFee(
+                        "category_installation_fees",
+                        cat.key,
+                        Number(e.target.value)
+                      )
                     }
                   />
                 </label>
-              )
-            )}
-          </div>
+                <label className="block">
+                  <span className="text-xs font-medium text-gray-700">
+                    Installation materials (₦)
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    value={
+                      form.category_materials_fees?.[cat.key] ??
+                      settings.category_materials_fees?.[cat.key] ??
+                      ""
+                    }
+                    onChange={(e) =>
+                      updateCategoryFee(
+                        "category_materials_fees",
+                        cat.key,
+                        Number(e.target.value)
+                      )
+                    }
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-gray-700">
+                    Inspection fee (₦)
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    value={
+                      form.category_inspection_fees?.[cat.key] ??
+                      settings.category_inspection_fees?.[cat.key] ??
+                      ""
+                    }
+                    onChange={(e) =>
+                      updateCategoryFee(
+                        "category_inspection_fees",
+                        cat.key,
+                        Number(e.target.value)
+                      )
+                    }
+                  />
+                </label>
+              </div>
+            </div>
+          ))}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <label className="block">
-            <span className="text-sm font-medium text-gray-700">
-              VAT (%)
-            </span>
+            <span className="text-sm font-medium text-gray-700">VAT (%)</span>
             <input
               type="number"
               min={0}
@@ -194,7 +307,7 @@ const CheckoutShopSettings = () => {
           </label>
           <label className="block sm:col-span-2">
             <span className="text-sm font-medium text-gray-700">
-              Installation flat add-on (₦, optional — added to per-product installation in cart)
+              Installation flat add-on (₦) — shop cart / legacy fallback only
             </span>
             <input
               type="number"
@@ -211,7 +324,8 @@ const CheckoutShopSettings = () => {
           </label>
           <label className="block sm:col-span-2">
             <span className="text-sm font-medium text-gray-700">
-              Installation materials cost (₦) — Own Installer optional checkbox (battery / inverter / panels)
+              Materials cost fallback (₦) — used only if a category materials fee
+              is empty
             </span>
             <input
               type="number"
@@ -314,23 +428,6 @@ const CheckoutShopSettings = () => {
                   ).toLocaleString()}
                 </strong>
               </li>
-              {(settings.product_categories || []).map(
-                (cat: { key: string; label: string }) => (
-                  <li key={cat.key}>
-                    {cat.label}:{" "}
-                    <strong>
-                      ₦
-                      {Number(
-                        form.category_delivery_fees?.[cat.key] ??
-                          settings.category_delivery_fees?.[cat.key] ??
-                          form.delivery_fee ??
-                          settings.delivery_fee ??
-                          0
-                      ).toLocaleString()}
-                    </strong>
-                  </li>
-                )
-              )}
               <li>
                 VAT rate:{" "}
                 <strong>
@@ -338,37 +435,8 @@ const CheckoutShopSettings = () => {
                 </strong>
               </li>
               <li>
-                Insurance (when installation selected):{" "}
-                <strong>
-                  {form.insurance_fee_percentage ??
-                    settings.insurance_fee_percentage ??
-                    3}
-                  %
-                </strong>{" "}
-                of (items subtotal + installation total)
-              </li>
-              <li>
-                Installation flat add-on:{" "}
-                <strong>
-                  ₦
-                  {Number(
-                    form.installation_flat_addon ??
-                      settings.installation_flat_addon ??
-                      0
-                  ).toLocaleString()}
-                </strong>
-              </li>
-              <li>
                 Delivery label:{" "}
                 <strong>{preview.delivery_estimate_label}</strong>
-              </li>
-              <li>
-                Delivery window: {preview.delivery_estimated_from} →{" "}
-                {preview.delivery_estimated_to}
-              </li>
-              <li>
-                Installation reference date:{" "}
-                {preview.installation_estimated_date}
               </li>
             </ul>
           </div>
