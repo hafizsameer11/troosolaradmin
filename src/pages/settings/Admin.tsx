@@ -1,18 +1,20 @@
 import { useState } from "react";
-import { adminData, allAdminsData } from "./admin.ts";
 import EditProfile from "./EditProfile.tsx";
 import AdminDetail from "./AdminDetail.tsx";
 import AddNewAdminModal from "./AddNewAdminModel.tsx";
 
-//Code Related to the Integration
-import { useQuery } from "@tanstack/react-query";
-import { getAllUsers } from "../../utils/queries/users.ts";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Cookies from "js-cookie";
-import { getSingleUser } from "../../utils/queries/users.ts";
+import { getAdmins, getCurrentAdmin } from "../../utils/queries/users.ts";
 import LoadingSpinner from "../../components/common/LoadingSpinner.tsx";
-
+import {
+  formatUserActivityDate,
+  userProfileImageUrl,
+} from "../../utils/userMedia.ts";
+import type { Admin as AdminRecord } from "./admin.ts";
 
 const Admin = () => {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"activity" | "allAdmins">(
     "activity"
   );
@@ -48,7 +50,6 @@ const Admin = () => {
     setShowAddAdminModal(true);
   };
 
-  // Handle form input changes for new admin
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setNewUser((prev) => ({
@@ -57,44 +58,42 @@ const Admin = () => {
     }));
   };
 
-  // Handle admin added callback to refresh data
   const handleAdminAdded = () => {
-    refetch(); // Refresh the admin list
+    refetchAdmins();
   };
 
-  // API integration for users
+  const handleProfileUpdated = () => {
+    queryClient.invalidateQueries({ queryKey: ["current-admin"] });
+  };
+
   const token = Cookies.get("token");
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["all-users"],
-    queryFn: () => getAllUsers(token || ""),
-    enabled: !!token,
-  });
-
-  // Get current user data (assuming user ID 1 for now - you may need to get this from token or context)
   const { data: currentUserData, isLoading: isCurrentUserLoading } = useQuery({
-    queryKey: ["current-user"],
-    queryFn: () => getSingleUser(1, token || ""), // You may need to get the actual user ID
+    queryKey: ["current-admin"],
+    queryFn: () => getCurrentAdmin(token || ""),
     enabled: !!token,
   });
 
-  // Map API response to admins table (only role === "Admin")
-  const apiAdmins = data?.data?.["all users data"]
-    ? data.data["all users data"]
-      .filter((u: { role: string }) => u.role === "Admin")
-      .map((u: { 
-        id: number; 
-        first_name: string; 
-        sur_name: string; 
-        email: string; 
-        phone?: string; 
-        bvn?: string; 
-        profile_picture?: string; 
-        role: string; 
-        user_code?: string; 
-        refferal_code?: string; 
-        is_active: number; 
-        is_verified: number; 
-        created_at: string; 
+  const { data: adminsData, isLoading: adminsLoading, isError: adminsError, refetch: refetchAdmins } = useQuery({
+    queryKey: ["admin-users"],
+    queryFn: () => getAdmins(token || ""),
+    enabled: !!token && activeTab === "allAdmins",
+  });
+
+  const apiAdmins: AdminRecord[] = Array.isArray(adminsData?.data)
+    ? adminsData.data.map((u: {
+        id: number;
+        first_name: string;
+        sur_name: string;
+        email: string;
+        phone?: string;
+        bvn?: string;
+        profile_picture?: string;
+        role: string;
+        user_code?: string;
+        refferal_code?: string;
+        is_active: number;
+        is_verified: number;
+        created_at: string;
       }) => ({
         id: String(u.id),
         firstName: u.first_name,
@@ -103,44 +102,40 @@ const Admin = () => {
         phone: u.phone || "",
         bvn: u.bvn || "",
         password: "**********",
-        image: u.profile_picture || "/assets/layout/profile.png",
+        image: userProfileImageUrl(u.profile_picture),
         role: u.role,
         userCode: u.user_code || "",
         referralCode: u.refferal_code || "",
         isActive: u.is_active === 1,
         isVerified: u.is_verified === 1,
         dateJoined: u.created_at
-          ? new Date(u.created_at).toLocaleString("en-GB", {
-            day: "2-digit",
-            month: "2-digit",
-            year: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: true,
-          }).replace(/\//g, "-").replace(",", "/")
+          ? formatUserActivityDate(u.created_at)
           : "",
-        activity: [], // You may fill this if API provides
+        activity: [],
       }))
     : [];
 
-  // Use API admins if available, else fallback to dummy
-  const adminsToShow = apiAdmins.length > 0 ? apiAdmins : allAdminsData;
+  const adminsToShow = apiAdmins.filter((admin) => {
+    if (!searchTerm.trim()) {
+      return true;
+    }
+    const term = searchTerm.toLowerCase();
+    return (
+      admin.firstName.toLowerCase().includes(term) ||
+      admin.surname.toLowerCase().includes(term) ||
+      admin.email.toLowerCase().includes(term)
+    );
+  });
 
-  // If viewing admin details, show AdminDetail component with correct data
   if (selectedAdminId) {
-    // Find the selected admin from the current adminsToShow list
-    const selectedAdmin = adminsToShow.find((a: { id: string }) => a.id === selectedAdminId);
-    // Pass the full admin object to AdminDetail if found
     return (
       <AdminDetail
         adminId={selectedAdminId}
-        adminData={selectedAdmin}
         onGoBack={handleGoBack}
       />
     );
   }
 
-  // Show loading indicator while fetching current user data
   if (isCurrentUserLoading) {
     return (
       <div className="w-full bg-[#F5F7FF]">
@@ -149,12 +144,18 @@ const Admin = () => {
     );
   }
 
-  // Get current user data from API response
   const currentUser = currentUserData?.data;
+  const profileImage = userProfileImageUrl(currentUser?.profile_picture);
+  const activities = Array.isArray(currentUser?.activitys)
+    ? currentUser.activitys.map((item: { id: number; activity: string; created_at: string }) => ({
+        id: String(item.id),
+        description: item.activity,
+        date: formatUserActivityDate(item.created_at),
+      }))
+    : [];
 
   return (
     <div className="w-full bg-[#F5F7FF]">
-      {/* Admin Profile Card */}
       <div
         className="bg-gradient-to-r from-[#4e4376] to-[#f9d423] rounded-lg mb-6 relative"
         style={{
@@ -165,34 +166,27 @@ const Admin = () => {
         }}
       >
         <div className="absolute inset-0 p-12 flex">
-          {/* Left Section - Profile Card */}
           <div
             className="bg-gradient-to-br from-[#5D72C2] to-[#FFA50080] bg-opacity-20 border border-[#FFA126] border-opacity-30 rounded-lg p-8 flex flex-col items-center justify-center"
             style={{ width: "310px", height: "100%" }}
           >
             <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white mb-6">
-              {currentUser?.profile_picture ? (
-                <img
-                  src={`https://api.troosolar.com/users/${currentUser.profile_picture}`}
-                  alt="Admin Profile"
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.currentTarget.src = "/assets/images/profile.png";
-                  }}
-                />
-              ) : (
-                <img
-                  src="/assets/images/profile.png"
-                  alt="Admin Profile"
-                  className="w-full h-full object-cover"
-                />
-              )}
+              <img
+                src={profileImage}
+                alt="Admin Profile"
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.src = "/assets/images/profile.png";
+                }}
+              />
             </div>
             <h2 className="text-[#FFFFFF] text-2xl font-medium mb-2 text-center">
-              {currentUser ? `${currentUser.sur_name} ${currentUser.first_name}` : `${adminData.surname} ${adminData.firstName}`}
+              {currentUser
+                ? `${currentUser.sur_name ?? ""} ${currentUser.first_name ?? ""}`.trim()
+                : "Admin"}
             </h2>
             <p className="text-[#FFFFFF] text-xs opacity-90 mb-20 text-center">
-              {currentUser?.email || adminData.email}
+              {currentUser?.email ?? ""}
             </p>
 
             <button
@@ -203,21 +197,19 @@ const Admin = () => {
             </button>
           </div>
 
-          {/* Right Section - Details */}
           <div className="flex-1 ml-12 flex justify-between">
-            {/* Middle Column - Personal Details */}
             <div className="text-white space-y-8 flex-1">
               <div>
                 <p className="text-sm opacity-75 mb-1">First Name</p>
-                <p className="text-lg font-medium">{currentUser?.first_name || adminData.firstName}</p>
+                <p className="text-lg font-medium">{currentUser?.first_name ?? "—"}</p>
               </div>
               <div>
                 <p className="text-sm opacity-75 mb-1">Surname</p>
-                <p className="text-lg font-medium">{currentUser?.sur_name || adminData.surname}</p>
+                <p className="text-lg font-medium">{currentUser?.sur_name ?? "—"}</p>
               </div>
               <div>
                 <p className="text-sm opacity-75 mb-1">Email Address</p>
-                <p className="text-lg font-medium">{currentUser?.email || adminData.email}</p>
+                <p className="text-lg font-medium">{currentUser?.email ?? "—"}</p>
               </div>
               <div>
                 <p className="text-sm opacity-75 mb-1">Phone</p>
@@ -225,14 +217,13 @@ const Admin = () => {
               </div>
             </div>
 
-            {/* Right Column - BVN and Add Admin Button */}
             <div className="text-white text-right flex flex-col justify-between">
               <div>
                 <p className="text-sm opacity-75 mb-1">BVN</p>
-                <p className="text-lg font-medium">{currentUser?.bvn || adminData.bvn || "N/A"}</p>
+                <p className="text-lg font-medium">{currentUser?.bvn || "N/A"}</p>
               </div>
 
-              <button 
+              <button
                 onClick={handleAddNewAdmin}
                 className="bg-white text-[#000000] px-6 py-3 rounded-full font-semibold hover:bg-gray-100 transition-colors cursor-pointer"
               >
@@ -243,10 +234,8 @@ const Admin = () => {
         </div>
       </div>
 
-      {/* Activity Section */}
       <div className="mt-12 px-2">
         <div className="mb-8">
-          {/* Tab Group Container */}
           <div
             className="bg-white rounded-full p-2 shadow-sm border border-[#CDCDCD] flex"
             style={{ width: "235px", height: "60px" }}
@@ -271,7 +260,6 @@ const Admin = () => {
             </button>
           </div>
 
-          {/* More Actions and Search Row */}
           <div className="mt-4 flex justify-between items-center">
             <button className="bg-white text-gray-600 px-6 py-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors flex items-center space-x-2 shadow-sm cursor-pointer">
               <span>More Actions</span>
@@ -285,7 +273,6 @@ const Admin = () => {
               </svg>
             </button>
 
-            {/* Search Bar - Only show for All Admins tab */}
             {activeTab === "allAdmins" && (
               <div className="relative w-80">
                 <input
@@ -317,7 +304,6 @@ const Admin = () => {
           </div>
         </div>
 
-        {/* Activity Table */}
         {activeTab === "activity" && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <div className="bg-[#EBEBEB] px-6 py-4 border-b border-gray-200">
@@ -336,43 +322,51 @@ const Admin = () => {
                 </div>
               </div>
             </div>
-            <div className="divide-y divide-gray-100">
-              {adminData.activity.map((activity: { id: string; description: string; date: string }, index: number) => (
-                <div
-                  key={activity.id}
-                  className={`px-6 py-4 ${index % 2 === 0 ? "bg-[#F8F8F8]" : "bg-white"
-                    } transition-colors border-b border-gray-100 last:border-b-0 hover:bg-gray-50`}
-                >
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center space-x-4">
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />
-                      <span className="text-gray-800 text-sm">
-                        {activity.description}
-                      </span>
-                    </div>
-                    <div className="text-gray-600 text-sm text-center">
-                      {activity.date}
+            {activities.length === 0 ? (
+              <div className="px-6 py-8 text-center text-gray-500 text-sm">
+                No activity recorded yet.
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {activities.map((activity: { id: string; description: string; date: string }, index: number) => (
+                  <div
+                    key={activity.id}
+                    className={`px-6 py-4 ${index % 2 === 0 ? "bg-[#F8F8F8]" : "bg-white"
+                      } transition-colors border-b border-gray-100 last:border-b-0 hover:bg-gray-50`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center space-x-4">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <span className="text-gray-800 text-sm">
+                          {activity.description}
+                        </span>
+                      </div>
+                      <div className="text-gray-600 text-sm text-center">
+                        {activity.date}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        {/* All Admins Tab Content */}
         {activeTab === "allAdmins" && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            {isLoading ? (
+            {adminsLoading ? (
               <div className="py-8 text-center text-gray-500">Loading admins...</div>
-            ) : isError ? (
+            ) : adminsError ? (
               <div className="py-8 text-center text-red-500">Failed to load admins.</div>
+            ) : adminsToShow.length === 0 ? (
+              <div className="py-8 text-center text-gray-500">
+                No admin accounts yet. Use <strong>Add New Admin</strong> to invite staff.
+              </div>
             ) : (
               <table className="min-w-full divide-y divide-gray-200">
-                {/* Table Head */}
                 <thead className="bg-[#EBEBEB]">
                   <tr>
                     <th
@@ -420,7 +414,6 @@ const Admin = () => {
                   </tr>
                 </thead>
 
-                {/* Table Body */}
                 <tbody className="bg-white divide-y divide-gray-200">
                   {adminsToShow.map((admin: { id: string; firstName: string; surname: string; email: string; role: string; dateJoined: string; bvn: string }, index: number) => (
                     <tr
@@ -468,21 +461,20 @@ const Admin = () => {
         )}
       </div>
 
-      {/* Edit Profile Modal */}
       <EditProfile
         isOpen={isEditProfileOpen}
         onClose={handleCloseEditProfile}
+        onProfileUpdated={handleProfileUpdated}
         adminData={{
-          firstName: currentUser?.first_name || adminData.firstName,
-          surname: currentUser?.sur_name || adminData.surname,
-          email: currentUser?.email || adminData.email,
-          bvn: currentUser?.bvn || adminData.bvn,
-          password: "**********", // Don't show actual password
-          image: currentUser?.profile_picture ? `https://api.troosolar.com/users/${currentUser.profile_picture}` : adminData.image,
+          firstName: currentUser?.first_name ?? "",
+          surname: currentUser?.sur_name ?? "",
+          email: currentUser?.email ?? "",
+          bvn: currentUser?.bvn ?? "",
+          password: "**********",
+          image: profileImage,
         }}
       />
 
-      {/* Add New Admin Modal */}
       <AddNewAdminModal
         showAddModal={showAddAdminModal}
         setShowAddModal={setShowAddAdminModal}

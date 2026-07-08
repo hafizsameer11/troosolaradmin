@@ -1,20 +1,40 @@
 import { useState } from "react";
-import { allAdminsData } from "./admin.ts";
 import EditProfile from "./EditProfile.tsx";
+import { useQuery } from "@tanstack/react-query";
+import Cookies from "js-cookie";
+import { getSingleUser } from "../../utils/queries/users.ts";
+import LoadingSpinner from "../../components/common/LoadingSpinner.tsx";
+import {
+  formatUserActivityDate,
+  userProfileImageUrl,
+} from "../../utils/userMedia.ts";
 
 interface AdminDetailProps {
   adminId: string;
-  adminData?: any; // Add adminData prop to receive the actual admin data
   onGoBack: () => void;
 }
 
-const AdminDetail = ({ adminId, adminData, onGoBack }: AdminDetailProps) => {
+const AdminDetail = ({ adminId, onGoBack }: AdminDetailProps) => {
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const token = Cookies.get("token");
 
-  // Use the passed adminData if available, otherwise fallback to finding in allAdminsData
-  const admin = adminData || allAdminsData.find((admin) => admin.id === adminId);
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["admin-detail", adminId],
+    queryFn: () => getSingleUser(adminId, token || ""),
+    enabled: !!token && !!adminId,
+  });
 
-  if (!admin) {
+  const apiUser = data?.data;
+
+  if (isLoading) {
+    return (
+      <div className="w-full bg-[#F5F7FF]">
+        <LoadingSpinner message="Loading admin details..." size="lg" />
+      </div>
+    );
+  }
+
+  if (isError || !apiUser) {
     return (
       <div className="w-full p-8">
         <div className="text-center">
@@ -30,6 +50,29 @@ const AdminDetail = ({ adminId, adminData, onGoBack }: AdminDetailProps) => {
     );
   }
 
+  const admin = {
+    id: String(apiUser.id),
+    firstName: apiUser.first_name ?? "",
+    surname: apiUser.sur_name ?? "",
+    email: apiUser.email ?? "",
+    phone: apiUser.phone ?? "",
+    bvn: apiUser.bvn ?? "",
+    password: "**********",
+    image: userProfileImageUrl(apiUser.profile_picture),
+    role: apiUser.role ?? "",
+    userCode: apiUser.user_code ?? "",
+    referralCode: apiUser.refferal_code ?? "",
+    isActive: apiUser.is_active === 1,
+    isVerified: apiUser.is_verified === 1,
+    activity: Array.isArray(apiUser.activitys)
+      ? apiUser.activitys.map((item: { id: number; activity: string; created_at: string }) => ({
+          id: String(item.id),
+          description: item.activity,
+          date: formatUserActivityDate(item.created_at),
+        }))
+      : [],
+  };
+
   const handleEditProfile = () => {
     setIsEditProfileOpen(true);
   };
@@ -40,7 +83,6 @@ const AdminDetail = ({ adminId, adminData, onGoBack }: AdminDetailProps) => {
 
   return (
     <div className="w-full">
-      {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-gray-900 mb-2">
           Admin {admin.surname}
@@ -53,7 +95,6 @@ const AdminDetail = ({ adminId, adminData, onGoBack }: AdminDetailProps) => {
         </button>
       </div>
 
-      {/* Admin Profile Card */}
       <div
         className="bg-gradient-to-r from-[#4e4376]  to-[#f9d423] rounded-lg mb-6 relative"
         style={{
@@ -64,16 +105,18 @@ const AdminDetail = ({ adminId, adminData, onGoBack }: AdminDetailProps) => {
         }}
       >
         <div className="absolute inset-0 p-12 flex">
-          {/* Left Section - Profile Card */}
           <div
             className="bg-gradient-to-br from-[#5D72C2] to-[#FFA50080] bg-opacity-20 border border-[#FFA126] border-opacity-30 rounded-lg p-8 flex flex-col items-center justify-center"
             style={{ width: "310px", height: "100%" }}
           >
             <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white mb-6">
               <img
-                src={admin.image || "/assets/images/profile.png"}
+                src={admin.image}
                 alt="Admin Profile"
                 className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.src = "/assets/images/profile.png";
+                }}
               />
             </div>
             <h2 className="text-[#FFFFFF] text-2xl font-medium mb-2 text-center">
@@ -91,9 +134,7 @@ const AdminDetail = ({ adminId, adminData, onGoBack }: AdminDetailProps) => {
             </button>
           </div>
 
-          {/* Right Section - Details */}
           <div className="flex-1 ml-12 flex justify-between">
-            {/* Middle Column - Personal Details */}
             <div className="text-white space-y-8 flex-1">
               <div>
                 <p className="text-sm opacity-75 mb-1">First Name</p>
@@ -113,7 +154,6 @@ const AdminDetail = ({ adminId, adminData, onGoBack }: AdminDetailProps) => {
               </div>
             </div>
 
-            {/* Right Column - Additional Info and Delete Admin Button */}
             <div className="text-white text-right flex flex-col justify-between">
               <div className="space-y-6">
                 <div>
@@ -128,9 +168,9 @@ const AdminDetail = ({ adminId, adminData, onGoBack }: AdminDetailProps) => {
                   <p className="text-sm opacity-75 mb-1">Status</p>
                   <p className="text-lg font-medium">
                     <span className={`px-2 py-1 rounded-full text-xs ${
-                      admin.isActive ? 'bg-green-500' : 'bg-red-500'
+                      admin.isActive ? "bg-green-500" : "bg-red-500"
                     }`}>
-                      {admin.isActive ? 'Active' : 'Inactive'}
+                      {admin.isActive ? "Active" : "Inactive"}
                     </span>
                   </p>
                 </div>
@@ -144,10 +184,8 @@ const AdminDetail = ({ adminId, adminData, onGoBack }: AdminDetailProps) => {
         </div>
       </div>
 
-      {/* Activity Section */}
       <div className="mt-12 px-2">
         <div className="mb-8">
-          {/* Tab Group Container */}
           <div
             className="bg-white rounded-full p-2 shadow-sm border border-[#CDCDCD] flex"
             style={{ width: "235px", height: "60px" }}
@@ -160,7 +198,6 @@ const AdminDetail = ({ adminId, adminData, onGoBack }: AdminDetailProps) => {
             </button>
           </div>
 
-          {/* More Actions Row */}
           <div className="mt-4">
             <button className="bg-white text-gray-600 px-6 py-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors flex items-center space-x-2 shadow-sm">
               <span>More Actions</span>
@@ -176,10 +213,8 @@ const AdminDetail = ({ adminId, adminData, onGoBack }: AdminDetailProps) => {
           </div>
         </div>
 
-        {/* Activity Table */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
-            {/* Table Head */}
             <thead className="bg-[#EBEBEB]">
               <tr>
                 <th
@@ -203,35 +238,41 @@ const AdminDetail = ({ adminId, adminData, onGoBack }: AdminDetailProps) => {
               </tr>
             </thead>
 
-            {/* Table Body */}
             <tbody className="bg-white divide-y divide-gray-100">
-              {admin.activity.map((activity: any, index: number) => (
-                <tr
-                  key={activity.id}
-                  className={`${
-                    index % 2 === 0 ? "bg-[#F8F8F8]" : "bg-white"
-                  } transition-colors border-b border-gray-100 last:border-b-0`}
-                >
-                  <td className="px-6 py-4 text-sm text-gray-800">
-                    <div className="flex items-center space-x-4">
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />
-                      <span>{activity.description}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-600 text-right">
-                    {activity.date}
+              {admin.activity.length === 0 ? (
+                <tr>
+                  <td colSpan={2} className="px-6 py-8 text-center text-gray-500 text-sm">
+                    No activity recorded yet.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                admin.activity.map((activity: { id: string; description: string; date: string }, index: number) => (
+                  <tr
+                    key={activity.id}
+                    className={`${
+                      index % 2 === 0 ? "bg-[#F8F8F8]" : "bg-white"
+                    } transition-colors border-b border-gray-100 last:border-b-0`}
+                  >
+                    <td className="px-6 py-4 text-sm text-gray-800">
+                      <div className="flex items-center space-x-4">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <span>{activity.description}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600 text-right">
+                      {activity.date}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Edit Profile Modal */}
       <EditProfile
         isOpen={isEditProfileOpen}
         onClose={handleCloseEditProfile}

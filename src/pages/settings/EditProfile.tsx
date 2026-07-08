@@ -10,6 +10,7 @@ import Cookies from 'js-cookie';
 interface EditProfileProps {
   isOpen: boolean;
   onClose: () => void;
+  onProfileUpdated?: () => void;
   adminData: {
     firstName: string;
     surname: string;
@@ -20,7 +21,7 @@ interface EditProfileProps {
   };
 }
 
-const EditProfile = ({ isOpen, onClose, adminData }: EditProfileProps) => {
+const EditProfile = ({ isOpen, onClose, onProfileUpdated, adminData }: EditProfileProps) => {
   const [formData, setFormData] = useState({
     firstName: adminData.firstName,
     surname: adminData.surname,
@@ -60,7 +61,7 @@ const EditProfile = ({ isOpen, onClose, adminData }: EditProfileProps) => {
       return await updateUser(formData, token || "");
     },
     onSuccess: () => {
-      console.log("Profile updated successfully");
+      onProfileUpdated?.();
       onClose();
     },
     onError: (error) => {

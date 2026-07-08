@@ -292,6 +292,10 @@ export const updateAuditRequestStatus = async (
   payload: {
     status: "approved" | "rejected" | "completed";
     admin_notes?: string;
+    approval_payment_date?: string;
+    approval_payment_time?: string;
+    approval_payment_amount?: number;
+    approval_payment_account_details?: string;
     property_state?: string;
     property_address?: string;
     contact_name?: string;

@@ -3,6 +3,7 @@ import { API_ENDPOINTS } from "../../../apiConfig";
 
 export type CheckoutSettingsPayload = {
   delivery_fee?: number;
+  category_delivery_fees?: Record<string, number>;
   delivery_min_working_days?: number;
   delivery_max_working_days?: number;
   /** @deprecated legacy flat NGN */

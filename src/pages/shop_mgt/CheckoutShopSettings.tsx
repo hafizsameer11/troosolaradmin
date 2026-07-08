@@ -27,6 +27,7 @@ const CheckoutShopSettings = () => {
     if (!settings) return;
     setForm({
       delivery_fee: settings.delivery_fee,
+      category_delivery_fees: settings.category_delivery_fees || {},
       delivery_min_working_days: settings.delivery_min_working_days,
       delivery_max_working_days: settings.delivery_max_working_days,
       insurance_fee: settings.insurance_fee,
@@ -81,22 +82,23 @@ const CheckoutShopSettings = () => {
   return (
     <div className="max-w-2xl">
       <p className="text-sm text-gray-600 mb-6">
-        These values drive cart checkout: VAT %, delivery fee and window,
-        insurance as a % of (items + installation) when installation is
-        selected, optional flat shop add-on on top of per-product installation,
-        installation lead time, and the installation notice shown in the cart.
+        These values drive cart checkout and Buy Now / BNPL flows: VAT %, delivery
+        fees (global default and per product category), delivery window, insurance
+        as a % of (items + installation) when installation is selected, optional
+        flat shop add-on on top of per-product installation, installation lead time,
+        and the installation notice shown in the cart.
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-5 bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <label className="block">
+          <label className="block sm:col-span-2">
             <span className="text-sm font-medium text-gray-700">
-              Delivery fee (₦)
+              Default delivery fee (₦) — shop cart &amp; fallback when a category fee is not set
             </span>
             <input
               type="number"
               min={0}
-              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              className="mt-1 w-full max-w-xs border border-gray-300 rounded-lg px-3 py-2 text-sm"
               value={form.delivery_fee ?? ""}
               onChange={(e) =>
                 setForm((f) => ({
@@ -106,6 +108,51 @@ const CheckoutShopSettings = () => {
               }
             />
           </label>
+        </div>
+
+        <div className="rounded-xl border border-[#273E8E]/15 bg-[#F5F7FF] p-4 space-y-3">
+          <p className="text-sm font-semibold text-gray-900">
+            Buy Now / BNPL delivery fee by product category
+          </p>
+          <p className="text-xs text-gray-600">
+            Set a delivery fee for each solution type (e.g. full solar kit vs battery only).
+            Used when the bundle has no embedded delivery fee and no state/location override applies.
+          </p>
+          <div className="grid grid-cols-1 gap-3">
+            {(settings.product_categories || []).map(
+              (cat: { key: string; label: string }) => (
+                <label key={cat.key} className="block">
+                  <span className="text-sm font-medium text-gray-700">
+                    {cat.label}
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    className="mt-1 w-full max-w-xs border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    value={
+                      form.category_delivery_fees?.[cat.key] ??
+                      settings.category_delivery_fees?.[cat.key] ??
+                      ""
+                    }
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        category_delivery_fees: {
+                          ...(f.category_delivery_fees ||
+                            settings.category_delivery_fees ||
+                            {}),
+                          [cat.key]: Number(e.target.value),
+                        },
+                      }))
+                    }
+                  />
+                </label>
+              )
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <label className="block">
             <span className="text-sm font-medium text-gray-700">
               VAT (%)
@@ -241,7 +288,7 @@ const CheckoutShopSettings = () => {
             </p>
             <ul className="space-y-1 text-gray-700">
               <li>
-                Delivery fee:{" "}
+                Default delivery fee:{" "}
                 <strong>
                   ₦
                   {Number(
@@ -249,6 +296,23 @@ const CheckoutShopSettings = () => {
                   ).toLocaleString()}
                 </strong>
               </li>
+              {(settings.product_categories || []).map(
+                (cat: { key: string; label: string }) => (
+                  <li key={cat.key}>
+                    {cat.label}:{" "}
+                    <strong>
+                      ₦
+                      {Number(
+                        form.category_delivery_fees?.[cat.key] ??
+                          settings.category_delivery_fees?.[cat.key] ??
+                          form.delivery_fee ??
+                          settings.delivery_fee ??
+                          0
+                      ).toLocaleString()}
+                    </strong>
+                  </li>
+                )
+              )}
               <li>
                 VAT rate:{" "}
                 <strong>

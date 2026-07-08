@@ -167,12 +167,52 @@ const BundleMgt = () => {
   // Order List modal states
   const [showOrderListModal, setShowOrderListModal] = useState(false);
   const [orderListBundle, setOrderListBundle] = useState<Bundle | null>(null);
+  const [orderListFlow, setOrderListFlow] = useState<"buy_now" | "bnpl">("buy_now");
   const [orderListTab, setOrderListTab] = useState<"orderlist" | "invoice">("orderlist");
 
-  // Editable order list state — keyed by "mat-{id}"
+  type OlEditRow = {
+    id: number;
+    title: string;
+    amount: string;
+    quantity: string;
+    unit: string;
+    quantityApplies: boolean;
+    visibility: "both" | "troosolar" | "own";
+  };
+  type FeeEditRow = {
+    id: number;
+    title: string;
+    amount: string;
+    visibility: "both" | "troosolar" | "own";
+  };
+  type FlowOrderConfig = { orderItems: OlEditRow[]; fees: FeeEditRow[] };
+
+  const emptyFlowOrderConfig = (): FlowOrderConfig => ({ orderItems: [], fees: [] });
+
+  // Editable order list state — keyed by checkout flow, then "mat-{id}" for materials
   const [editMatRate, setEditMatRate] = useState<Record<string, string>>({});
-  const [editOrderItems, setEditOrderItems] = useState<{ id: number; title: string; amount: string; quantity: string; unit: string; quantityApplies: boolean; visibility: "both" | "troosolar" | "own" }[]>([]);
-  const [editSvc, setEditSvc] = useState<{ id: number; title: string; amount: string; visibility: "both" | "troosolar" | "own" }[]>([]);
+  const [flowConfigs, setFlowConfigs] = useState<Record<"buy_now" | "bnpl", FlowOrderConfig>>({
+    buy_now: emptyFlowOrderConfig(),
+    bnpl: emptyFlowOrderConfig(),
+  });
+  const editOrderItems = flowConfigs[orderListFlow].orderItems;
+  const editSvc = flowConfigs[orderListFlow].fees;
+  const setEditOrderItems = (updater: React.SetStateAction<OlEditRow[]>) => {
+    setFlowConfigs((prev) => {
+      const current = prev[orderListFlow].orderItems;
+      const next = typeof updater === "function" ? updater(current) : updater;
+      return { ...prev, [orderListFlow]: { ...prev[orderListFlow], orderItems: next } };
+    });
+    setOrderListDirty(true);
+  };
+  const setEditSvc = (updater: React.SetStateAction<FeeEditRow[]>) => {
+    setFlowConfigs((prev) => {
+      const current = prev[orderListFlow].fees;
+      const next = typeof updater === "function" ? updater(current) : updater;
+      return { ...prev, [orderListFlow]: { ...prev[orderListFlow], fees: next } };
+    });
+    setOrderListDirty(true);
+  };
   const [orderListDirty, setOrderListDirty] = useState(false);
   const [savingOrderList, setSavingOrderList] = useState(false);
   /** Simulates customer dashboard: Troosolar vs own installer for read-only invoice preview */
@@ -324,9 +364,42 @@ const BundleMgt = () => {
 
   const bundleDetails: any = (bundleDetailsData as any)?.data || null;
 
+  const dedupeFeeRows = (fees: FeeEditRow[]): FeeEditRow[] => {
+    const seen = new Set<string>();
+    return fees.filter((fee) => {
+      const key = `${fee.title.trim().toLowerCase()}|${fee.visibility}|${fee.amount}`;
+      if (!fee.title.trim() || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
+  const dedupeOrderRows = (items: OlEditRow[]): OlEditRow[] => {
+    const seen = new Set<string>();
+    return items.filter((item) => {
+      const key = [
+        item.title.trim().toLowerCase(),
+        item.visibility,
+        item.amount,
+        item.quantity,
+        item.unit,
+        item.quantityApplies ? "1" : "0",
+      ].join("|");
+      if (!item.title.trim() || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
+  const normalizeFlowConfig = (config: FlowOrderConfig): FlowOrderConfig => ({
+    orderItems: dedupeOrderRows(config.orderItems),
+    fees: dedupeFeeRows(config.fees),
+  });
+
   // Initialize editable state when bundle details load
   React.useEffect(() => {
     if (!bundleDetails) return;
+    if (orderListDirty) return;
 
     const matRateMap: Record<string, string> = {};
     (bundleDetails.bundle_materials || []).forEach((bm: any) => {
@@ -336,63 +409,56 @@ const BundleMgt = () => {
     });
     setEditMatRate(matRateMap);
 
-    // ── 1. Parse custom_services → [OL] order items + invoice fees ──
+    // ── 1. Parse custom_services → per-flow order items + invoice fees ──
     const allServices = (bundleDetails.custom_services || []) as any[];
-    type OlEditRow = {
-      id: number;
-      title: string;
-      amount: string;
-      quantity: string;
-      unit: string;
-      quantityApplies: boolean;
-      visibility: "both" | "troosolar" | "own";
-    };
-    type FeeEditRow = {
-      id: number;
-      title: string;
-      amount: string;
-      visibility: "both" | "troosolar" | "own";
-    };
-    const olItems: OlEditRow[] = [];
-    const feeItems: FeeEditRow[] = [];
-    allServices.forEach((svc: any) => {
-      const rawTitle = svc.title || "";
-      if (rawTitle.startsWith(OL_PREFIX) || rawTitle.startsWith(OL_VIS_TROO_PREFIX) || rawTitle.startsWith(OL_VIS_OWN_PREFIX)) {
-        const stripped = stripOrderItemPrefix(rawTitle);
-        if (stripped) {
-          const qtyRaw = svc.quantity ?? 1;
-          const qtyAppliesRaw = svc.quantity_applies ?? svc.quantity_applicable ?? svc.is_quantity_applicable;
-          const qtyApplies = qtyAppliesRaw === undefined || qtyAppliesRaw === null
-            ? true
-            : !(String(qtyAppliesRaw).toLowerCase() === "false" || String(qtyAppliesRaw) === "0");
-          olItems.push({
-            id: svc.id,
-            title: stripped,
-            amount: String(svc.service_amount || 0),
-            quantity: String(qtyRaw || 1),
-            unit: String(svc.unit || "Nos"),
-            quantityApplies: qtyApplies,
-            visibility: parseOrderItemVisibility(rawTitle),
-          });
-        }
-      } else {
-        feeItems.push({
-          id: svc.id,
-          title: stripFeeVisibilityPrefix(rawTitle),
-          amount: String(svc.service_amount || 0),
-          visibility: parseFeeVisibility(rawTitle),
+    const parseServicesForFlow = (flow: "buy_now" | "bnpl"): FlowOrderConfig => {
+      const olItems: OlEditRow[] = [];
+      const feeItems: FeeEditRow[] = [];
+      allServices
+        .filter((svc) => (svc.flow_type || "buy_now") === flow)
+        .forEach((svc: any) => {
+          const rawTitle = svc.title || "";
+          if (rawTitle.startsWith(OL_PREFIX) || rawTitle.startsWith(OL_VIS_TROO_PREFIX) || rawTitle.startsWith(OL_VIS_OWN_PREFIX)) {
+            const stripped = stripOrderItemPrefix(rawTitle);
+            if (stripped) {
+              const qtyRaw = svc.quantity ?? 1;
+              const qtyAppliesRaw = svc.quantity_applies ?? svc.quantity_applicable ?? svc.is_quantity_applicable;
+              const qtyApplies = qtyAppliesRaw === undefined || qtyAppliesRaw === null
+                ? true
+                : !(String(qtyAppliesRaw).toLowerCase() === "false" || String(qtyAppliesRaw) === "0");
+              olItems.push({
+                id: svc.id,
+                title: stripped,
+                amount: String(svc.service_amount || 0),
+                quantity: String(qtyRaw || 1),
+                unit: String(svc.unit || "Nos"),
+                quantityApplies: qtyApplies,
+                visibility: parseOrderItemVisibility(rawTitle),
+              });
+            }
+          } else {
+            feeItems.push({
+              id: svc.id,
+              title: stripFeeVisibilityPrefix(rawTitle),
+              amount: String(svc.service_amount || 0),
+              visibility: parseFeeVisibility(rawTitle),
+            });
+          }
         });
-      }
-    });
+      return { orderItems: dedupeOrderRows(olItems), fees: dedupeFeeRows(feeItems) };
+    };
 
-    // ── 2. If no valid [OL] items saved yet, seed from bundle_items / product_model ──
-    if (olItems.length === 0) {
+    let buyNowConfig = normalizeFlowConfig(parseServicesForFlow("buy_now"));
+    let bnplConfig = normalizeFlowConfig(parseServicesForFlow("bnpl"));
+
+    // ── 2. If Buy Now has no [OL] items yet, seed from bundle_items / product_model ──
+    if (buyNowConfig.orderItems.length === 0) {
       const biArr = (bundleDetails.bundle_items || []) as any[];
       biArr.forEach((bi: any, idx: number) => {
         const prodTitle = bi.product?.title || bi.product?.name || bi.title || bi.name || "";
         if (prodTitle.trim()) {
           const rate = bi.rate_override ?? bi.product?.price ?? 0;
-          olItems.push({
+          buyNowConfig.orderItems.push({
             id: Date.now() + idx,
             title: prodTitle,
             amount: String(parseFloat(String(rate)) || 0),
@@ -403,16 +469,23 @@ const BundleMgt = () => {
           });
         }
       });
-      if (olItems.length === 0 && bundleDetails.product_model) {
+      if (buyNowConfig.orderItems.length === 0 && bundleDetails.product_model) {
         String(bundleDetails.product_model).split("/").map((s: string) => s.trim()).filter(Boolean)
-          .forEach((part: string, idx: number) => olItems.push({ id: Date.now() + idx, title: part, amount: "0", quantity: "1", unit: "Nos", quantityApplies: true, visibility: "both" }));
+          .forEach((part: string, idx: number) => buyNowConfig.orderItems.push({
+            id: Date.now() + idx,
+            title: part,
+            amount: "0",
+            quantity: "1",
+            unit: "Nos",
+            quantityApplies: true,
+            visibility: "both",
+          }));
       }
     }
 
-    setEditOrderItems(olItems);
-    setEditSvc(feeItems);
+    setFlowConfigs({ buy_now: buyNowConfig, bnpl: bnplConfig });
     setOrderListDirty(false);
-  }, [bundleDetails]);
+  }, [bundleDetails, orderListDirty]);
 
   const bundleMaterials: BundleMaterial[] =
     (bundleMaterialsData as any)?.data || (bundleMaterialsData as any) || [];
@@ -742,27 +815,9 @@ const BundleMgt = () => {
   const handleOpenOrderList = (bundle: Bundle) => {
     setOrderListBundle(bundle);
     setOrderListTab("orderlist");
+    setOrderListFlow("buy_now");
+    setOrderListDirty(false);
     setShowOrderListModal(true);
-  };
-
-  const handleRemoveMaterialFromBundle = (materialId: number) => {
-    if (!orderListBundle || !bundleDetails) return;
-    const materials_detail = (bundleDetails.bundle_materials || [])
-      .filter((bm: any) => bm.material_id !== materialId)
-      .map((bm: any) => ({
-        material_id: bm.material_id,
-        quantity: bm.quantity ?? 1,
-        rate_override: parseFloat(editMatRate[`mat-${bm.material_id}`]) || null,
-      }));
-    updateBundleMutation.mutate({
-      id: orderListBundle.id,
-      data: {
-        materials_detail,
-        total_price: orderListBundle.total_price,
-        discount_price: orderListBundle.discount_price ?? orderListBundle.total_price,
-        title: orderListBundle.title,
-      } as any,
-    });
   };
 
   const handleSaveOrderList = () => {
@@ -775,24 +830,34 @@ const BundleMgt = () => {
       rate_override: parseFloat(editMatRate[`mat-${bm.material_id}`]) || null,
     }));
 
-    const orderItems = editOrderItems
-      .filter((s) => s.title.trim() !== "")
-      .map((s) => ({
-        title: encodeOrderItemTitleWithVisibility(s.title, s.visibility || "both"),
-        service_amount: parseFloat(s.amount) || 0,
-        quantity: Math.max(1, parseInt(s.quantity || "1", 10) || 1),
-        unit: (s.unit || "Nos").trim() || "Nos",
-        quantity_applies: !!s.quantityApplies,
-      }));
+    const buildServicesForFlow = (flow: "buy_now" | "bnpl", config: FlowOrderConfig) => {
+      const normalized = normalizeFlowConfig(config);
+      const orderItems = normalized.orderItems
+        .filter((s) => s.title.trim() !== "")
+        .map((s) => ({
+          flow_type: flow,
+          title: encodeOrderItemTitleWithVisibility(s.title, s.visibility || "both"),
+          service_amount: parseFloat(s.amount) || 0,
+          quantity: Math.max(1, parseInt(s.quantity || "1", 10) || 1),
+          unit: (s.unit || "Nos").trim() || "Nos",
+          quantity_applies: !!s.quantityApplies,
+        }));
 
-    const feeItems = editSvc
-      .filter((s) => s.title.trim() !== "")
-      .map((s) => ({
-        title: encodeFeeTitleWithVisibility(s.title, s.visibility || "both"),
-        service_amount: parseFloat(s.amount) || 0,
-      }));
+      const feeItems = normalized.fees
+        .filter((s) => s.title.trim() !== "")
+        .map((s) => ({
+          flow_type: flow,
+          title: encodeFeeTitleWithVisibility(s.title, s.visibility || "both"),
+          service_amount: parseFloat(s.amount) || 0,
+        }));
 
-    const custom_services = [...orderItems, ...feeItems];
+      return [...orderItems, ...feeItems];
+    };
+
+    const custom_services = [
+      ...buildServicesForFlow("buy_now", flowConfigs.buy_now),
+      ...buildServicesForFlow("bnpl", flowConfigs.bnpl),
+    ];
 
     const payload: any = {
       materials_detail,
@@ -809,23 +874,6 @@ const BundleMgt = () => {
       },
       {
         onSuccess: () => {
-          setEditOrderItems(orderItems.map((s, i) => ({
-            id: Date.now() + i,
-            title: stripOrderItemPrefix(s.title),
-            amount: String(s.service_amount),
-            quantity: String(s.quantity || 1),
-            unit: String(s.unit || "Nos"),
-            quantityApplies: s.quantity_applies !== false,
-            visibility: parseOrderItemVisibility(s.title),
-          })));
-          setEditSvc(
-            feeItems.map((s, i) => ({
-              id: Date.now() + 1000 + i,
-              title: stripFeeVisibilityPrefix(s.title),
-              amount: String(s.service_amount),
-              visibility: parseFeeVisibility(s.title),
-            }))
-          );
           setOrderListDirty(false);
           setSavingOrderList(false);
           alert("Changes saved successfully!");
@@ -841,21 +889,37 @@ const BundleMgt = () => {
 
   const handleAddOrderItem = () => {
     setEditOrderItems((prev) => [...prev, { id: Date.now(), title: "", amount: "0", quantity: "1", unit: "Nos", quantityApplies: true, visibility: "both" }]);
-    setOrderListDirty(true);
   };
 
   const handleRemoveOrderItem = (idx: number) => {
     setEditOrderItems((prev) => prev.filter((_, i) => i !== idx));
-    setOrderListDirty(true);
   };
 
   const handleAddService = () => {
     setEditSvc((prev) => [...prev, { id: Date.now(), title: "", amount: "0", visibility: "both" }]);
-    setOrderListDirty(true);
   };
 
   const handleRemoveService = (idx: number) => {
     setEditSvc((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleDuplicateToOtherFlow = () => {
+    const otherFlow: "buy_now" | "bnpl" = orderListFlow === "buy_now" ? "bnpl" : "buy_now";
+    const source = flowConfigs[orderListFlow];
+    const sourceLabel = orderListFlow === "buy_now" ? "Buy Now" : "BNPL";
+    const targetLabel = otherFlow === "buy_now" ? "Buy Now" : "BNPL";
+    const confirmed = window.confirm(
+      `Copy the ${sourceLabel} order list and invoice fees to ${targetLabel}? This will replace any existing ${targetLabel} configuration.`
+    );
+    if (!confirmed) return;
+
+    setFlowConfigs((prev) => ({
+      ...prev,
+      [otherFlow]: {
+        orderItems: source.orderItems.map((item, i) => ({ ...item, id: Date.now() + i })),
+        fees: source.fees.map((fee, i) => ({ ...fee, id: Date.now() + 10000 + i })),
+      },
+    }));
     setOrderListDirty(true);
   };
 
@@ -1698,17 +1762,49 @@ const BundleMgt = () => {
                 <h2 className="text-xl font-bold text-gray-900">
                   Order List & Invoice — {orderListBundle.title}
                 </h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  Manage the items that appear in the customer's order summary and invoice for this bundle.
-                </p>
               </div>
               <button
-                onClick={() => { setShowOrderListModal(false); setOrderListBundle(null); }}
+                onClick={() => { setShowOrderListModal(false); setOrderListBundle(null); setOrderListFlow("buy_now"); }}
                 className="text-gray-500 hover:text-gray-700"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
+              </button>
+            </div>
+
+            {/* Checkout flow tabs */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+              <div className="flex border border-gray-200 rounded-lg overflow-hidden w-fit">
+                <button
+                  type="button"
+                  onClick={() => setOrderListFlow("buy_now")}
+                  className={`px-5 py-2 text-sm font-medium transition-colors ${
+                    orderListFlow === "buy_now"
+                      ? "bg-[#273E8E] text-white"
+                      : "bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  Buy Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrderListFlow("bnpl")}
+                  className={`px-5 py-2 text-sm font-medium transition-colors border-l border-gray-200 ${
+                    orderListFlow === "bnpl"
+                      ? "bg-[#273E8E] text-white"
+                      : "bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  BNPL
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={handleDuplicateToOtherFlow}
+                className="text-sm font-medium text-[#273E8E] hover:text-[#1e3270] border border-[#273E8E] px-4 py-2 rounded-full transition-colors"
+              >
+                Duplicate to {orderListFlow === "buy_now" ? "BNPL" : "Buy Now"}
               </button>
             </div>
 
@@ -1722,7 +1818,7 @@ const BundleMgt = () => {
                     : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
               >
-                Order List
+                Order summary
               </button>
               <button
                 onClick={() => setOrderListTab("invoice")}
@@ -1732,7 +1828,7 @@ const BundleMgt = () => {
                     : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
               >
-                Invoice
+                Invoice fees
               </button>
             </div>
 
@@ -1757,85 +1853,10 @@ const BundleMgt = () => {
                   </div>
                 )}
 
-                {/* Materials Section */}
+                {/* ── Order List Items (customer order summary) ── */}
                 <div className="mb-6">
                   <div className="flex justify-between items-center mb-3">
-                    <h3 className="text-lg font-semibold text-gray-800">Materials (Installation Items)</h3>
-                    <button
-                      onClick={() => {
-                        setSelectedBundle(orderListBundle);
-                        setShowMaterialsModal(true);
-                      }}
-                      className="bg-[#E8A91D] hover:bg-[#d89a1a] text-white px-4 py-2 rounded-full text-sm font-medium transition-colors cursor-pointer"
-                    >
-                      Manage Materials
-                    </button>
-                  </div>
-                  <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-[#EBEBEB] border-b">
-                          <th className="px-4 py-3 text-left text-sm font-medium text-black">Item Description</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-black w-20">Qty</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-black w-16">Unit</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-black w-36">Rate (₦)</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-black w-32">Total Cost</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-black w-24">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(!bundleDetails.bundle_materials || bundleDetails.bundle_materials.length === 0) ? (
-                          <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400">No materials added. Use &quot;Manage Materials&quot; to add installation materials.</td></tr>
-                        ) : (
-                          bundleDetails.bundle_materials.map((bm: any, idx: number) => {
-                            const mat = bm.material;
-                            const qty = bm.quantity || 1;
-                            const mKey = `mat-${bm.material_id}`;
-                            const rateStr = editMatRate[mKey] ?? String(bm.rate_override ?? mat?.selling_rate ?? mat?.rate ?? 0);
-                            const rate = parseFloat(rateStr) || 0;
-                            const total = rate * qty;
-                            return (
-                              <tr key={bm.id} className={idx % 2 === 0 ? "bg-gray-50" : "bg-white"}>
-                                <td className="px-4 py-2 text-sm font-medium text-gray-900">{mat?.name || `Material #${bm.material_id}`}</td>
-                                <td className="px-4 py-2 text-sm text-gray-700 text-center">{qty}</td>
-                                <td className="px-4 py-2 text-sm text-gray-700">{mat?.unit || "Nos"}</td>
-                                <td className="px-4 py-2">
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    step="0.01"
-                                    value={rateStr}
-                                    onChange={(e) => {
-                                      setEditMatRate((p) => ({ ...p, [mKey]: e.target.value }));
-                                      setOrderListDirty(true);
-                                    }}
-                                    className="w-32 border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none"
-                                  />
-                                </td>
-                                <td className="px-4 py-2 text-sm font-medium text-gray-700">
-                                  {total > 0 ? formatNaira(total) : <span className="italic text-gray-400">Included</span>}
-                                </td>
-                                <td className="px-4 py-2 text-center">
-                                  <button
-                                    onClick={() => handleRemoveMaterialFromBundle(bm.material_id)}
-                                    className="text-red-600 hover:text-red-800 text-sm font-medium"
-                                  >
-                                    Remove
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* ── Order List Items (editable — maps to customer's Order Summary) ── */}
-                <div className="mb-6">
-                  <div className="flex justify-between items-center mb-3">
-                    <h3 className="text-lg font-semibold text-gray-800">Order List Items</h3>
+                    <h3 className="text-lg font-semibold text-gray-800">Products on order summary</h3>
                     <button
                       onClick={handleAddOrderItem}
                       className="bg-[#273E8E] hover:bg-[#1e3270] text-white px-4 py-2 rounded-full text-sm font-medium transition-colors cursor-pointer"
@@ -1843,7 +1864,6 @@ const BundleMgt = () => {
                       + Add Item
                     </button>
                   </div>
-                  <p className="text-xs text-gray-500 mb-2">These items appear on the customer&apos;s Order Summary. You can add, edit, or remove items.</p>
                   <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
                     <table className="w-full">
                       <thead>
@@ -1977,9 +1997,6 @@ const BundleMgt = () => {
                   <span className="font-semibold text-gray-800">Bundle Price (Sub-Total)</span>
                   <span className="text-xl font-bold text-[#273E8E]">{formatNaira(orderListBundle.total_price)}</span>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  These items appear on the customer&apos;s Order Summary. Click &quot;Save Changes&quot; to persist.
-                </p>
 
                 {/* Bottom Save Button */}
                 {orderListDirty && (
@@ -2022,7 +2039,6 @@ const BundleMgt = () => {
                       + Add Fee
                     </button>
                   </div>
-                  <p className="text-xs text-gray-500 mb-2">These fees appear on the Invoice alongside the order list items (e.g. Installation Fees, Delivery Fees, Inspection Fees).</p>
                   <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
                     <table className="w-full">
                       <thead>
@@ -2048,7 +2064,7 @@ const BundleMgt = () => {
                                     setEditSvc((prev) => prev.map((s, i) => i === idx ? { ...s, title: val } : s));
                                     setOrderListDirty(true);
                                   }}
-                                  placeholder="e.g. Installation Fees, Delivery Fees"
+                                  placeholder="e.g. Installation Material, Delivery Fees"
                                   className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none"
                                 />
                               </td>
@@ -2113,7 +2129,9 @@ const BundleMgt = () => {
                 {/* ═══ FULL INVOICE PREVIEW (read-only combined view) ═══ */}
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                    <h3 className="text-lg font-bold text-gray-800">Invoice Preview — {orderListBundle.title}</h3>
+                    <h3 className="text-lg font-bold text-gray-800">
+                      Invoice Preview — {orderListBundle.title} ({orderListFlow === "buy_now" ? "Buy Now" : "BNPL"})
+                    </h3>
                     <label className="flex items-center gap-2 text-sm text-gray-700">
                       <span className="whitespace-nowrap font-medium">Preview as:</span>
                       <select
@@ -2227,10 +2245,6 @@ const BundleMgt = () => {
                     );
                   })()}
                 </div>
-
-                <p className="text-xs text-gray-500 mt-3">
-                  Manage fees above. Order list items are managed from the Order List tab.
-                </p>
               </div>
             )}
           </div>

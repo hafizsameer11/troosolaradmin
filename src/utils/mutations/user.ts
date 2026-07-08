@@ -9,6 +9,7 @@ export const addUser = async (
     phone?: string;
     bvn?: string;
     password?: string;
+    role?: "user" | "admin" | "super_admin";
   },
   token: string
 ): Promise<{ status: string; data: unknown; message: string }> => {

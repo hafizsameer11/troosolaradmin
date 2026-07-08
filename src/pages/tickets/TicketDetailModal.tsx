@@ -24,6 +24,26 @@ type ChatMsg = {
     at: string; // formatted time
 };
 
+const formatWhen = (value?: string) => {
+    if (!value) return "—";
+    const d = new Date(value.replace(" ", "T"));
+    if (Number.isNaN(d.getTime())) return value;
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    const time = d.toLocaleString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+    });
+    return `${dd}-${mm}-${yyyy} / ${time}`;
+};
+
+const formatStatus = (value?: string) => {
+    if (!value) return "Pending";
+    return value.charAt(0).toUpperCase() + value.slice(1);
+};
+
 const TicketDetailModal = ({ isOpen, onClose, ticket, onStatusUpdate }: TicketDetailModalProps) => {
     const [status, setStatus] = useState<"Change Status" | "Pending" | "Answered" | "Closed">("Change Status");
     const [input, setInput] = useState("");
@@ -83,11 +103,10 @@ const TicketDetailModal = ({ isOpen, onClose, ticket, onStatusUpdate }: TicketDe
     const ticketMeta = useMemo(
         () => ({
             id: ticketDetail?.data?.ticket_id ?? ticket?.id ?? "—",
-            subject: ticketDetail?.data?.subject ?? "Loan Issues",
-            firstRepayment: "July 3, 2025",
+            subject: ticketDetail?.data?.subject ?? ticket?.productName ?? "—",
             userName: ticketDetail?.data?.user_name ?? ticket?.name ?? "Unknown",
-            status: ticketDetail?.data?.status ?? ticket?.status ?? "Pending",
-            date: ticketDetail?.data?.date ?? ticket?.date ?? "",
+            status: formatStatus(ticketDetail?.data?.status ?? ticket?.status),
+            opened: formatWhen(ticketDetail?.data?.date ?? ticket?.date),
         }),
         [ticketDetail?.data, ticket]
     );
@@ -149,12 +168,12 @@ const TicketDetailModal = ({ isOpen, onClose, ticket, onStatusUpdate }: TicketDe
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-end bg-black/30 h-full"
+            className="fixed inset-0 z-50 flex items-stretch sm:items-center sm:justify-end bg-black/30"
             onMouseDown={(e) => {
                 if (e.target === e.currentTarget) onClose();
             }}
         >
-            <div className="bg-[#F7F7F8] rounded-2xl w-full max-w-[480px] shadow-xl relative overflow-hidden h-full flex flex-col">
+            <div className="bg-[#F7F7F8] sm:rounded-2xl w-full sm:max-w-[480px] shadow-xl relative overflow-hidden h-full flex flex-col min-h-0">
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-white">
                     <div>
@@ -196,23 +215,29 @@ const TicketDetailModal = ({ isOpen, onClose, ticket, onStatusUpdate }: TicketDe
                 </div>
 
                 {/* Ticket Info Card */}
-                <div className="px-5 pt-3 pb-3">
+                <div className="px-4 sm:px-5 pt-3 pb-3 shrink-0">
                     <div className="rounded-xl bg-white border border-gray-200 p-4">
                         <div className="grid grid-cols-2 gap-y-3 text-sm">
                             <div className="text-gray-600">Ticket ID</div>
-                            <div className="text-right font-semibold text-gray-900">{ticketMeta.id}</div>
+                            <div className="text-right font-semibold text-gray-900 break-words">{ticketMeta.id}</div>
 
                             <div className="text-gray-600">Subject</div>
-                            <div className="text-right font-semibold text-gray-900">{ticketMeta.subject}</div>
+                            <div className="text-right font-semibold text-gray-900 break-words">{ticketMeta.subject}</div>
 
-                            <div className="text-gray-600">First Repayment</div>
-                            <div className="text-right font-semibold text-gray-900">{ticketMeta.firstRepayment}</div>
+                            <div className="text-gray-600">Customer</div>
+                            <div className="text-right font-semibold text-gray-900 break-words">{ticketMeta.userName}</div>
+
+                            <div className="text-gray-600">Opened</div>
+                            <div className="text-right font-semibold text-gray-900 break-words">{ticketMeta.opened}</div>
+
+                            <div className="text-gray-600">Status</div>
+                            <div className="text-right font-semibold text-gray-900">{ticketMeta.status}</div>
                         </div>
                     </div>
                 </div>
 
                 {/* Chat Area */}
-                <div className="px-5 pb-3 flex-1 overflow-y-auto">
+                <div className="px-4 sm:px-5 pb-3 flex-1 min-h-0 overflow-y-auto overscroll-y-contain touch-pan-y">
                     {isLoading ? (
                         <div className="text-center text-gray-500 py-8">Loading messages...</div>
                     ) : isError ? (
@@ -220,7 +245,7 @@ const TicketDetailModal = ({ isOpen, onClose, ticket, onStatusUpdate }: TicketDe
                     ) : (
                         <div
                             ref={listRef}
-                            className="flex flex-col gap-3 mt-1 max-h-full pr-1"
+                            className="flex flex-col gap-3 mt-1 pr-1"
                         >
                             {messages.map((m) => (
                                 <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
@@ -249,7 +274,7 @@ const TicketDetailModal = ({ isOpen, onClose, ticket, onStatusUpdate }: TicketDe
                 </div>
 
                 {/* Message Input - stick to bottom */}
-                <div className="px-5 pb-5 pt-2 bg-white border-t border-gray-200" style={{ position: "sticky", bottom: 0, zIndex: 2 }}>
+                <div className="px-4 sm:px-5 pb-4 sm:pb-5 pt-2 bg-white border-t border-gray-200 shrink-0">
                     <div className="flex items-center gap-2">
                         <input
                             type="text"

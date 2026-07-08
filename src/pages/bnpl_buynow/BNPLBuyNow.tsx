@@ -48,6 +48,8 @@ import { getAllFinance } from "../../utils/queries/finance";
 import { API_DOMAIN } from "../../../apiConfig";
 import MonoLoansSection from "./MonoLoansSection";
 import MonoApplicationTools from "./MonoApplicationTools";
+import UserSearchSelect from "../../components/common/UserSearchSelect";
+import { getAllUsers } from "../../utils/queries/users";
 
 // Base URL for document links (backend stores paths like "loan_applications/xxx.pdf")
 const DOCUMENT_BASE_URL = API_DOMAIN.replace(/\/api\/?$/, "") || "https://app.troosolar.io";
@@ -365,6 +367,50 @@ function bnplApplicationOrderSummary(app: Record<string, unknown> | null | undef
   return null;
 }
 
+const GENERIC_INVOICE_BUCKET_LABELS = new Set([
+  "solar inverter",
+  "solar panels",
+  "battery",
+  "batteries",
+]);
+
+function isGenericInvoiceBreakdownRows(
+  rows: Array<{ description?: string }> | null | undefined
+): boolean {
+  if (!Array.isArray(rows) || rows.length === 0) return false;
+  return rows.every((row) => {
+    const desc = String(row.description || "").trim().toLowerCase();
+    return (
+      GENERIC_INVOICE_BUCKET_LABELS.has(desc) ||
+      [...GENERIC_INVOICE_BUCKET_LABELS].some((label) => desc.startsWith(`${label} `))
+    );
+  });
+}
+
+/** Detect legacy 40/35/25 fake bucket split from backend when bundle has no catalog lines. */
+function isFakePercentBundleBreakdown(
+  inv: { price?: number | string; description?: string } | null | undefined,
+  pan: { price?: number | string; description?: string } | null | undefined,
+  bat: { price?: number | string; description?: string } | null | undefined
+): boolean {
+  const pInv = Number(inv?.price ?? 0);
+  const pPan = Number(pan?.price ?? 0);
+  const pBat = Number(bat?.price ?? 0);
+  if (pInv <= 0 || pPan <= 0 || pBat <= 0) return false;
+  const total = pInv + pPan + pBat;
+  if (total <= 0) return false;
+  const rInv = pInv / total;
+  const rPan = pPan / total;
+  const rBat = pBat / total;
+  const near = (a: number, b: number) => Math.abs(a - b) < 0.02;
+  const genericDesc = isGenericInvoiceBreakdownRows([
+    { description: inv?.description },
+    { description: pan?.description },
+    { description: bat?.description },
+  ]);
+  return genericDesc && near(rInv, 0.4) && near(rPan, 0.35) && near(rBat, 0.25);
+}
+
 const getApiData = (response: any) => response?.data ?? response ?? null;
 
 const BNPL_TAB_FROM_PARAM: Record<string, string> = {
@@ -400,6 +446,25 @@ const BNPLBuyNow: React.FC = () => {
   const [statusForm, setStatusForm] = useState({
     status: "",
     admin_notes: "",
+    approval_payment_date: "",
+    approval_payment_time: "",
+    approval_payment_amount: "",
+    approval_payment_account_details: "",
+    counter_offer_min_deposit: "",
+    counter_offer_min_tenor: "",
+    property_state: "",
+    property_address: "",
+    contact_name: "",
+    contact_phone: "",
+  });
+
+  const emptyStatusForm = () => ({
+    status: "",
+    admin_notes: "",
+    approval_payment_date: "",
+    approval_payment_time: "",
+    approval_payment_amount: "",
+    approval_payment_account_details: "",
     counter_offer_min_deposit: "",
     counter_offer_min_tenor: "",
     property_state: "",
@@ -670,6 +735,36 @@ const BNPLBuyNow: React.FC = () => {
     enabled: (activeTab === "Custom Orders" && showCreateOrderModal) && !!token,
   });
 
+  const {
+    data: allUsersData,
+    isLoading: allUsersLoading,
+  } = useQuery({
+    queryKey: ["all-users", "custom-order-picker"],
+    queryFn: () => getAllUsers(token || ""),
+    enabled: showCreateOrderModal && !!token,
+  });
+
+  const customOrderUsers = React.useMemo(() => {
+    const rows = allUsersData?.data?.["all users data"];
+    if (!Array.isArray(rows)) {
+      return [];
+    }
+    return rows.map((u: {
+      id: number;
+      first_name?: string;
+      sur_name?: string;
+      email?: string;
+      phone?: string;
+      bvn?: string;
+    }) => ({
+      id: u.id,
+      name: `${u.first_name ?? ""} ${u.sur_name ?? ""}`.trim() || `User ${u.id}`,
+      email: u.email ?? "",
+      phone: u.phone ?? "",
+      bvn: u.bvn ?? "",
+    }));
+  }, [allUsersData]);
+
   // User Cart Query
   const {
     data: userCartResponse,
@@ -691,16 +786,7 @@ const BNPLBuyNow: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ["bnpl-applications"] });
       setShowStatusModal(false);
       setSelectedItem(null);
-      setStatusForm({
-        status: "",
-        admin_notes: "",
-        counter_offer_min_deposit: "",
-        counter_offer_min_tenor: "",
-        property_state: "",
-        property_address: "",
-        contact_name: "",
-        contact_phone: "",
-      });
+      setStatusForm(emptyStatusForm());
       alert("Status updated successfully.");
     },
     onError: (error: any) => {
@@ -719,16 +805,7 @@ const BNPLBuyNow: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ["bnpl-guarantors"] });
       setShowStatusModal(false);
       setSelectedItem(null);
-      setStatusForm({
-        status: "",
-        admin_notes: "",
-        counter_offer_min_deposit: "",
-        counter_offer_min_tenor: "",
-        property_state: "",
-        property_address: "",
-        contact_name: "",
-        contact_phone: "",
-      });
+      setStatusForm(emptyStatusForm());
     },
   });
 
@@ -740,16 +817,7 @@ const BNPLBuyNow: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ["buy-now-orders"] });
       setShowStatusModal(false);
       setSelectedItem(null);
-      setStatusForm({
-        status: "",
-        admin_notes: "",
-        counter_offer_min_deposit: "",
-        counter_offer_min_tenor: "",
-        property_state: "",
-        property_address: "",
-        contact_name: "",
-        contact_phone: "",
-      });
+      setStatusForm(emptyStatusForm());
     },
   });
 
@@ -854,10 +922,26 @@ const BNPLBuyNow: React.FC = () => {
 
   // Audit Request Status Update Mutation
   const updateAuditRequestStatusMutation = useMutation({
-    mutationFn: async (payload: { id: number; status: string; admin_notes?: string; property_state?: string; property_address?: string; contact_name?: string; contact_phone?: string }) => {
+    mutationFn: async (payload: {
+      id: number;
+      status: string;
+      admin_notes?: string;
+      approval_payment_date?: string;
+      approval_payment_time?: string;
+      approval_payment_amount?: number;
+      approval_payment_account_details?: string;
+      property_state?: string;
+      property_address?: string;
+      contact_name?: string;
+      contact_phone?: string;
+    }) => {
       return await updateAuditRequestStatus(payload.id, {
         status: payload.status as "approved" | "rejected" | "completed",
         admin_notes: payload.admin_notes,
+        approval_payment_date: payload.approval_payment_date,
+        approval_payment_time: payload.approval_payment_time,
+        approval_payment_amount: payload.approval_payment_amount,
+        approval_payment_account_details: payload.approval_payment_account_details,
         property_state: payload.property_state,
         property_address: payload.property_address,
         contact_name: payload.contact_name,
@@ -867,16 +951,7 @@ const BNPLBuyNow: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["audit-requests"] });
       setShowStatusModal(false);
-      setStatusForm({
-        status: "",
-        admin_notes: "",
-        counter_offer_min_deposit: "",
-        counter_offer_min_tenor: "",
-        property_state: "",
-        property_address: "",
-        contact_name: "",
-        contact_phone: "",
-      });
+      setStatusForm(emptyStatusForm());
       alert("Audit request status updated successfully!");
     },
     onError: (error: any) => {
@@ -1130,7 +1205,14 @@ const BNPLBuyNow: React.FC = () => {
     }
     setStatusForm({
       status: item.status || item.order_status || "",
-      admin_notes: "",
+      admin_notes: item.admin_notes || "",
+      approval_payment_date: item.approval_payment_date || "",
+      approval_payment_time: item.approval_payment_time || "",
+      approval_payment_amount:
+        item.approval_payment_amount != null && item.approval_payment_amount !== ""
+          ? String(item.approval_payment_amount)
+          : "",
+      approval_payment_account_details: item.approval_payment_account_details || "",
       counter_offer_min_deposit: depositPercentStr,
       counter_offer_min_tenor: item?.counter_offer_min_tenor ?? "",
       property_state: item?.property_state || "",
@@ -1218,10 +1300,42 @@ const BNPLBuyNow: React.FC = () => {
         admin_notes: statusForm.admin_notes,
       });
     } else if (activeTab === "Audit Requests") {
+      if (statusForm.status === "approved") {
+        if (!statusForm.approval_payment_date?.trim()) {
+          alert("Please enter the audit payment date.");
+          return;
+        }
+        if (!statusForm.approval_payment_time?.trim()) {
+          alert("Please enter the audit payment time.");
+          return;
+        }
+        const amount = Number(statusForm.approval_payment_amount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+          alert("Please enter a valid payment amount greater than zero.");
+          return;
+        }
+        if (!statusForm.approval_payment_account_details?.trim()) {
+          alert("Please enter payment account details for the customer.");
+          return;
+        }
+      }
+
       updateAuditRequestStatusMutation.mutate({
         id: selectedItem.id,
         status: statusForm.status,
-        admin_notes: statusForm.admin_notes,
+        admin_notes: statusForm.admin_notes || undefined,
+        approval_payment_date:
+          statusForm.status === "approved" ? statusForm.approval_payment_date : undefined,
+        approval_payment_time:
+          statusForm.status === "approved" ? statusForm.approval_payment_time : undefined,
+        approval_payment_amount:
+          statusForm.status === "approved"
+            ? Number(statusForm.approval_payment_amount)
+            : undefined,
+        approval_payment_account_details:
+          statusForm.status === "approved"
+            ? statusForm.approval_payment_account_details
+            : undefined,
         property_state: statusForm.property_state || undefined,
         property_address: statusForm.property_address || undefined,
         contact_name: statusForm.contact_name || undefined,
@@ -1324,6 +1438,40 @@ const BNPLBuyNow: React.FC = () => {
     });
   };
 
+  const formatAuditPreferredTime = (time24: string | null | undefined) => {
+    const raw = String(time24 || "").trim();
+    if (!raw) return "—";
+    const [h, m] = raw.split(":");
+    const hour = Number(h);
+    if (!Number.isFinite(hour)) return raw;
+    const suffix = hour >= 12 ? "PM" : "AM";
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${m || "00"} ${suffix}`;
+  };
+
+  const formatAuditPreferredSchedule = (item: {
+    preferred_audit_date?: string | null;
+    preferred_audit_time?: string | null;
+  }) => {
+    const date = item?.preferred_audit_date;
+    const time = item?.preferred_audit_time;
+    if (!date && !time) return null;
+    const dateLabel = date ? formatDate(date) : "—";
+    const timeLabel = formatAuditPreferredTime(time);
+    return `${dateLabel} at ${timeLabel}`;
+  };
+
+  const displayUserFullName = (
+    user: { name?: string; first_name?: string; sur_name?: string } | null | undefined,
+    fallback = "N/A"
+  ) => {
+    if (!user) return fallback;
+    const fromName = String(user.name ?? "").trim();
+    if (fromName) return fromName;
+    const fromParts = [user.first_name, user.sur_name].filter(Boolean).join(" ").trim();
+    return fromParts || fallback;
+  };
+
   const isBnplDeliveryPlaceholder = (title: string | null | undefined) =>
     !String(title ?? "").trim() || /^bnpl\s*delivery$/i.test(String(title).trim());
 
@@ -1339,6 +1487,16 @@ const BNPLBuyNow: React.FC = () => {
 
   const getOrderBundleOrProductTitle = (item: any, summary?: any): string | null => {
     if (!item && !summary) return null;
+    const summaryItems = summary?.items;
+    if (Array.isArray(summaryItems) && summaryItems.length > 0) {
+      return summaryItems
+        .map((row: any) => {
+          const label = row.name || row.title || "Item";
+          const q = row.quantity && Number(row.quantity) > 1 ? ` (×${row.quantity})` : "";
+          return `${label}${q}`;
+        })
+        .join(", ");
+    }
     if (item?.bundle?.title) return String(item.bundle.title);
     if (item?.product?.title) return String(item.product.title);
     if (summary?.bundle_title) return String(summary.bundle_title);
@@ -1346,10 +1504,49 @@ const BNPLBuyNow: React.FC = () => {
     const firstItem = item?.items?.[0];
     if (firstItem) {
       if (firstItem.item?.title) return String(firstItem.item.title);
+      if (firstItem.itemable?.title) return String(firstItem.itemable.title);
       if (firstItem.title) return String(firstItem.title);
       if (firstItem.name) return String(firstItem.name);
     }
     return null;
+  };
+
+  const resolveModalOrderItems = (summary: any, item: any) => {
+    if (summary?.items?.length) return summary.items;
+    const raw = item?.items;
+    if (!Array.isArray(raw) || raw.length === 0) return [];
+    return raw.map((row: any) => ({
+      name: row.item?.title || row.itemable?.title || row.name || "Item",
+      description: row.item?.subtitle || row.item?.title || row.itemable?.title || "",
+      quantity: row.quantity ?? 1,
+      price: Number(row.unit_price ?? row.subtotal ?? 0),
+    }));
+  };
+
+  const renderOrderItemsList = (items: any[]) => {
+    if (!items?.length) return null;
+    return (
+      <div className="space-y-3">
+        {items.map((orderItem: any, idx: number) => (
+          <div key={idx} className="border border-gray-200 rounded-lg p-4">
+            <div className="flex justify-between items-start gap-4">
+              <div>
+                <h4 className="font-medium text-gray-900">{orderItem.name}</h4>
+                {orderItem.description && orderItem.description !== orderItem.name ? (
+                  <p className="text-sm text-gray-600 mt-1">{orderItem.description}</p>
+                ) : null}
+              </div>
+              <div className="text-right shrink-0">
+                <div className="font-semibold text-[#273E8E]">
+                  {formatCurrency(orderItem.price)}
+                </div>
+                <div className="text-sm text-gray-500">Qty: {orderItem.quantity ?? 1}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   };
 
   const getRequestedServiceDate = (item: any, summary?: any) => {
@@ -2483,7 +2680,7 @@ const BNPLBuyNow: React.FC = () => {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 {item.user
-                                  ? (item.user.name || `${(item.user as any).first_name ?? ""} ${(item.user as any).sur_name ?? ""}`.trim() || "N/A")
+                                  ? displayUserFullName(item.user)
                                   : "N/A"}
                                 <br />
                                 <span className="text-xs text-gray-500">
@@ -2745,7 +2942,7 @@ const BNPLBuyNow: React.FC = () => {
                             const bundleProductTitle = getOrderBundleOrProductTitle(selectedItem, orderSummary);
                             return bundleProductTitle ? (
                               <div className="md:col-span-2">
-                                <p className="text-xs text-gray-500 mb-1">Selected bundle / product</p>
+                                <p className="text-xs text-gray-500 mb-1">Selected items</p>
                                 <p className="text-sm font-semibold text-gray-900">{bundleProductTitle}</p>
                               </div>
                             ) : null;
@@ -2791,7 +2988,7 @@ const BNPLBuyNow: React.FC = () => {
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Full Name</p>
                             <p className="text-sm font-medium text-gray-900">
-                              {selectedItem.user.first_name} {selectedItem.user.sur_name}
+                              {displayUserFullName(selectedItem.user)}
                             </p>
                           </div>
                           {selectedItem.user.email && (
@@ -2864,6 +3061,18 @@ const BNPLBuyNow: React.FC = () => {
                             </div>
                           )}
                         </div>
+                      </div>
+                    )}
+
+                    {(activeTab === "Buy Now Orders" || activeTab === "BNPL Orders") &&
+                      resolveModalOrderItems(orderSummary, selectedItem).length > 0 && (
+                      <div className="bg-white rounded-lg border border-gray-200 p-6">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Order Items</h3>
+                        {loadingSummary ? (
+                          <LoadingSpinner message="Loading items..." />
+                        ) : (
+                          renderOrderItemsList(resolveModalOrderItems(orderSummary, selectedItem))
+                        )}
                       </div>
                     )}
 
@@ -3843,74 +4052,53 @@ const BNPLBuyNow: React.FC = () => {
                         <p className="text-xs text-gray-500 mb-4">
                           State, address, current power sources, floors, rooms, and gated estate — matching the customer flow (estate name/address required when gated).
                         </p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">State</p>
-                            <p className="text-sm font-medium text-gray-900">
-                              {bnplDash(selectedItem.property_state != null ? String(selectedItem.property_state) : null)}
-                            </p>
-                          </div>
-                          <div className="md:col-span-2">
-                            <p className="text-xs text-gray-500 mb-1">Address</p>
-                            <p className="text-sm font-medium text-gray-900 whitespace-pre-wrap">
+                        <div className="space-y-2 text-sm text-gray-900">
+                          <p>
+                            <span className="font-semibold text-gray-700">State:</span>{" "}
+                            {bnplDash(selectedItem.property_state != null ? String(selectedItem.property_state) : null)}
+                          </p>
+                          <p>
+                            <span className="font-semibold text-gray-700">Address:</span>{" "}
+                            <span className="whitespace-pre-wrap">
                               {bnplDash(selectedItem.property_address != null ? String(selectedItem.property_address) : null)}
-                            </p>
-                          </div>
-                          <div className="md:col-span-2">
-                            <p className="text-xs text-gray-500 mb-1">Current power sources</p>
-                            <p className="text-sm font-medium text-gray-900">
-                              {bnplDash(selectedItem.property_landmark != null ? String(selectedItem.property_landmark) : null)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Floors</p>
-                            <p className="text-sm font-medium text-gray-900">
-                              {selectedItem.property_floors != null && selectedItem.property_floors !== ""
-                                ? String(selectedItem.property_floors)
-                                : "—"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Rooms</p>
-                            <p className="text-sm font-medium text-gray-900">
-                              {selectedItem.property_rooms != null && selectedItem.property_rooms !== ""
-                                ? String(selectedItem.property_rooms)
-                                : "—"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Is this in a gated estate?</p>
-                            <p className="text-sm font-medium text-gray-900">
-                              {bnplGatedEstateLabel(selectedItem.is_gated_estate)}
-                            </p>
-                          </div>
+                            </span>
+                          </p>
+                          <p>
+                            <span className="font-semibold text-gray-700">Current Power Sources:</span>{" "}
+                            {bnplDash(selectedItem.property_landmark != null ? String(selectedItem.property_landmark) : null)}
+                          </p>
+                          <p>
+                            <span className="font-semibold text-gray-700">Floors:</span>{" "}
+                            {selectedItem.property_floors != null && selectedItem.property_floors !== ""
+                              ? String(selectedItem.property_floors)
+                              : "—"}
+                          </p>
+                          <p>
+                            <span className="font-semibold text-gray-700">Rooms:</span>{" "}
+                            {selectedItem.property_rooms != null && selectedItem.property_rooms !== ""
+                              ? String(selectedItem.property_rooms)
+                              : "—"}
+                          </p>
+                          <p>
+                            <span className="font-semibold text-gray-700">Gated Estate:</span>{" "}
+                            {bnplGatedEstateLabel(selectedItem.is_gated_estate)}
+                          </p>
                           {selectedItem.is_gated_estate ? (
                             <>
-                              <div>
-                                <p className="text-xs text-gray-500 mb-1">Estate name</p>
-                                <p className="text-sm font-medium text-gray-900 whitespace-pre-wrap">
+                              <p>
+                                <span className="font-semibold text-gray-700">Estate name:</span>{" "}
+                                <span className="whitespace-pre-wrap">
                                   {bnplLoanAppEstateText(selectedItem as Record<string, unknown>, "name")}
-                                </p>
-                              </div>
-                              <div className="md:col-span-2">
-                                <p className="text-xs text-gray-500 mb-1">Estate address</p>
-                                <p className="text-sm font-medium text-gray-900 whitespace-pre-wrap">
+                                </span>
+                              </p>
+                              <p>
+                                <span className="font-semibold text-gray-700">Estate address:</span>{" "}
+                                <span className="whitespace-pre-wrap">
                                   {bnplLoanAppEstateText(selectedItem as Record<string, unknown>, "address")}
-                                </p>
-                              </div>
+                                </span>
+                              </p>
                             </>
-                          ) : (
-                            <>
-                              <div>
-                                <p className="text-xs text-gray-500 mb-1">Estate name</p>
-                                <p className="text-sm font-medium text-gray-400">—</p>
-                              </div>
-                              <div className="md:col-span-2">
-                                <p className="text-xs text-gray-500 mb-1">Estate address</p>
-                                <p className="text-sm font-medium text-gray-400">—</p>
-                              </div>
-                            </>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     )}
@@ -4559,6 +4747,14 @@ const BNPLBuyNow: React.FC = () => {
                             </p>
                           </div>
                         )}
+                        {(selectedItem.preferred_audit_date || selectedItem.preferred_audit_time) && (
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Preferred audit schedule</p>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {formatAuditPreferredSchedule(selectedItem)}
+                            </p>
+                          </div>
+                        )}
                         <div>
                           <p className="text-xs text-gray-500 mb-1">Request source</p>
                           <p className="text-sm font-semibold text-gray-900">
@@ -4587,7 +4783,7 @@ const BNPLBuyNow: React.FC = () => {
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Full Name</p>
                             <p className="text-sm font-medium text-gray-900">
-                              {selectedItem.user.first_name} {selectedItem.user.sur_name}
+                              {displayUserFullName(selectedItem.user)}
                             </p>
                           </div>
                           {selectedItem.user.email && (
@@ -4613,7 +4809,7 @@ const BNPLBuyNow: React.FC = () => {
                     )}
 
                     {/* Property Details */}
-                    {(selectedItem.property_address || selectedItem.property_state || selectedItem.contact_name || selectedItem.contact_phone || selectedItem.company_name || selectedItem.facility_description || selectedItem.building_type || selectedItem.property_floors || selectedItem.property_rooms !== undefined || selectedItem.is_gated_estate !== undefined) && (
+                    {(selectedItem.property_address || selectedItem.property_state || selectedItem.contact_name || selectedItem.contact_phone || selectedItem.company_name || selectedItem.facility_description || selectedItem.building_type || selectedItem.property_floors || selectedItem.property_rooms !== undefined || selectedItem.is_gated_estate !== undefined || selectedItem.preferred_audit_date || selectedItem.preferred_audit_time) && (
                       <div className="bg-white rounded-lg border border-gray-200 p-6">
                         <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                           <svg className="w-5 h-5 mr-2 text-[#273E8E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -4664,6 +4860,14 @@ const BNPLBuyNow: React.FC = () => {
                             <div>
                               <p className="text-xs text-gray-500 mb-1">Current power sources</p>
                               <p className="text-sm font-medium text-gray-900">{selectedItem.property_landmark}</p>
+                            </div>
+                          )}
+                          {(selectedItem.preferred_audit_date || selectedItem.preferred_audit_time) && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Preferred audit schedule</p>
+                              <p className="text-sm font-medium text-gray-900">
+                                {formatAuditPreferredSchedule(selectedItem)}
+                              </p>
                             </div>
                           )}
                           {selectedItem.building_type && (
@@ -4738,6 +4942,52 @@ const BNPLBuyNow: React.FC = () => {
                       </div>
                     )}
 
+                    {(selectedItem.status === "approved" &&
+                      (selectedItem.approval_payment_date ||
+                        selectedItem.approval_payment_time ||
+                        selectedItem.approval_payment_amount != null ||
+                        selectedItem.approval_payment_account_details)) && (
+                      <div className="bg-emerald-50 rounded-lg border border-emerald-200 p-6">
+                        <h3 className="text-lg font-semibold text-emerald-900 mb-4">
+                          Audit payment instructions (sent to customer)
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {selectedItem.approval_payment_date && (
+                            <div>
+                              <p className="text-xs text-emerald-700 mb-1">Payment date</p>
+                              <p className="text-sm font-medium text-gray-900">
+                                {formatDate(selectedItem.approval_payment_date)}
+                              </p>
+                            </div>
+                          )}
+                          {selectedItem.approval_payment_time && (
+                            <div>
+                              <p className="text-xs text-emerald-700 mb-1">Payment time</p>
+                              <p className="text-sm font-medium text-gray-900">
+                                {formatAuditPreferredTime(selectedItem.approval_payment_time)}
+                              </p>
+                            </div>
+                          )}
+                          {selectedItem.approval_payment_amount != null && (
+                            <div>
+                              <p className="text-xs text-emerald-700 mb-1">Payment amount</p>
+                              <p className="text-sm font-medium text-gray-900">
+                                {formatCurrency(selectedItem.approval_payment_amount)}
+                              </p>
+                            </div>
+                          )}
+                          {selectedItem.approval_payment_account_details && (
+                            <div className="md:col-span-2">
+                              <p className="text-xs text-emerald-700 mb-1">Account details</p>
+                              <p className="text-sm font-medium text-gray-900 whitespace-pre-wrap">
+                                {selectedItem.approval_payment_account_details}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Additional Information */}
                     <div className="bg-white rounded-lg border border-gray-200 p-6">
                       <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Information</h3>
@@ -4748,7 +4998,10 @@ const BNPLBuyNow: React.FC = () => {
                             "id", "status", "audit_type", "audit_subtype", "customer_type", "user", "property_address",
                             "property_state", "property_landmark", "building_type", "facility_description",
                             "property_floors", "property_rooms", "company_name", "is_gated_estate",
-                            "contact_name", "contact_phone", "has_property_details", "order_id", "created_at", "updated_at"
+                            "contact_name", "contact_phone", "has_property_details", "order_id", "created_at", "updated_at",
+                            "preferred_audit_date", "preferred_audit_time", "source",
+                            "approval_payment_date", "approval_payment_time", "approval_payment_amount",
+                            "approval_payment_account_details", "admin_notes", "approved_at", "approved_by"
                           ];
                           if (skipKeys.includes(key)) return null;
                           if (bnplSkipAdditionalInfoScalar(key, value)) return null;
@@ -4920,30 +5173,37 @@ const BNPLBuyNow: React.FC = () => {
                     {orderSummary.items && orderSummary.items.length > 0 && (
                       <div className="mb-4">
                         <h3 className="font-semibold text-gray-900 mb-3">Order Items</h3>
-                        <div className="space-y-3">
-                          {orderSummary.items.map((item: any, idx: number) => (
-                            <div key={idx} className="border border-gray-200 rounded-lg p-4">
-                              <div className="flex justify-between items-start mb-2">
-                                <div>
-                                  <h4 className="font-medium text-gray-900">{item.name}</h4>
-                                  {item.description && (
-                                    <p className="text-sm text-gray-600 mt-1">{item.description}</p>
-                                  )}
-                                </div>
-                                <div className="text-right">
-                                  <div className="font-semibold text-[#273E8E]">
-                                    {formatCurrency(item.price)}
-                                  </div>
-                                  <div className="text-sm text-gray-500">
-                                    Qty: {item.quantity}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                        {renderOrderItemsList(orderSummary.items)}
                       </div>
                     )}
+
+                    {(() => {
+                      const feeRows = [
+                        { label: "Product subtotal", value: orderSummary.product_price },
+                        { label: "Installation fee", value: orderSummary.installation_fee },
+                        { label: "Material cost", value: orderSummary.material_cost },
+                        { label: "Delivery fee", value: orderSummary.delivery_fee },
+                        { label: "Inspection fee", value: orderSummary.inspection_fee },
+                        { label: "Insurance fee", value: orderSummary.insurance_fee },
+                        { label: "VAT", value: orderSummary.vat_amount },
+                      ].filter((row) => row.value != null && Number(row.value) > 0);
+
+                      if (feeRows.length === 0) return null;
+
+                      return (
+                        <div className="mb-4 bg-white border border-gray-200 rounded-lg p-4">
+                          <h3 className="font-semibold text-gray-900 mb-3">Charges &amp; fees</h3>
+                          <div className="space-y-2 text-sm">
+                            {feeRows.map((row) => (
+                              <div key={row.label} className="flex justify-between gap-4">
+                                <span className="text-gray-600">{row.label}</span>
+                                <span className="font-medium text-gray-900">{formatCurrency(row.value)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {orderSummary.appliances &&
                       !(
@@ -4986,9 +5246,14 @@ const BNPLBuyNow: React.FC = () => {
                           <span className="ml-2 font-medium">{orderInvoice.order_number || selectedItem.id}</span>
                         </div>
                         <div>
-                          <span className="text-gray-600">Total:</span>
+                          <span className="text-gray-600">Total paid:</span>
                           <span className="ml-2 font-medium text-[#273E8E]">
-                            {formatCurrency(orderInvoice.invoice?.total || orderInvoice.total || selectedItem.total_price)}
+                            {formatCurrency(
+                              orderInvoice.invoice?.grand_total
+                                ?? orderInvoice.invoice?.total
+                                ?? orderInvoice.total
+                                ?? selectedItem.total_price
+                            )}
                           </span>
                         </div>
                       </div>
@@ -4998,7 +5263,22 @@ const BNPLBuyNow: React.FC = () => {
                       <div className="space-y-4">
                         {/* Product breakdown: prefer per-line bundle materials from API; else legacy 3-bucket summary */}
                         {(() => {
+                          const productLineItems = orderInvoice.invoice.product_line_items;
                           const lineItems = orderInvoice.invoice.bundle_line_items;
+                          const bundleTitle =
+                            orderInvoice.bundle_title ||
+                            selectedItem?.bundle?.title ||
+                            orderInvoice.invoice?.bundle_title;
+                          const isSingleBundleTitleLine =
+                            Array.isArray(productLineItems) &&
+                            productLineItems.length === 1 &&
+                            bundleTitle &&
+                            String(productLineItems[0]?.description || "").trim() === String(bundleTitle).trim();
+                          const hasProductLines =
+                            Array.isArray(productLineItems) &&
+                            productLineItems.length > 0 &&
+                            !isGenericInvoiceBreakdownRows(productLineItems) &&
+                            !isSingleBundleTitleLine;
                           const hasLineItems = Array.isArray(lineItems) && lineItems.length > 0;
                           const invoiceTypeLabel = (t: string) => {
                             if (t === "inverter") return "Inverter";
@@ -5007,10 +5287,49 @@ const BNPLBuyNow: React.FC = () => {
                             return "Other / accessory";
                           };
 
+                          if (hasProductLines) {
+                            return (
+                              <div className="mb-4">
+                                <h3 className="font-semibold text-gray-900 mb-2">
+                                  {bundleTitle ? `Order list — ${bundleTitle}` : "Product breakdown"}
+                                </h3>
+                                <p className="text-sm text-gray-600 mb-3">
+                                  Catalog prices per item. Order-level discount (if any) is shown in the fees breakdown below.
+                                </p>
+                                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                                  <table className="min-w-full text-sm">
+                                    <thead className="bg-gray-50 text-left text-gray-600">
+                                      <tr>
+                                        <th className="px-3 py-2 font-medium">Description</th>
+                                        <th className="px-3 py-2 font-medium">Qty</th>
+                                        <th className="px-3 py-2 font-medium text-right">Unit price</th>
+                                        <th className="px-3 py-2 font-medium text-right">Amount</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                      {productLineItems.map((row: { description?: string; quantity?: number; rate?: number; total_cost?: number }, idx: number) => (
+                                        <tr key={idx}>
+                                          <td className="px-3 py-2 font-medium text-gray-900">{row.description || "—"}</td>
+                                          <td className="px-3 py-2">{row.quantity ?? 1}</td>
+                                          <td className="px-3 py-2 text-right text-gray-700">{formatCurrency(row.rate ?? 0)}</td>
+                                          <td className="px-3 py-2 text-right font-semibold text-[#273E8E]">
+                                            {formatCurrency(row.total_cost ?? 0)}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            );
+                          }
+
                           if (hasLineItems) {
                             return (
                               <div className="mb-4">
-                                <h3 className="font-semibold text-gray-900 mb-2">Product breakdown</h3>
+                                <h3 className="font-semibold text-gray-900 mb-2">
+                                  {bundleTitle ? `Order list — ${bundleTitle}` : "Product breakdown"}
+                                </h3>
                                 <p className="text-sm text-gray-600 mb-3">
                                   Each row is a catalog item in the bundle. Amounts are scaled to match the order
                                   subtotal using each line&apos;s share of the bundle catalog total (no fake panel
@@ -5052,7 +5371,32 @@ const BNPLBuyNow: React.FC = () => {
                           const showInv = lineHasAmount(inv);
                           const showPan = lineHasAmount(pan);
                           const showBat = lineHasAmount(bat);
+                          const fakeSplit = isFakePercentBundleBreakdown(inv, pan, bat);
+
+                          if (fakeSplit && bundleTitle) {
+                            const bundleTotal =
+                              Number(inv?.price ?? 0) + Number(pan?.price ?? 0) + Number(bat?.price ?? 0);
+                            return (
+                              <div className="mb-4">
+                                <h3 className="font-semibold text-gray-900 mb-2">
+                                  Order list — {bundleTitle}
+                                </h3>
+                                <p className="text-sm text-gray-600 mb-3">
+                                  Bundle order (single line). Fee and tax details are in the breakdown below.
+                                </p>
+                                <div className="border border-gray-200 rounded-lg p-4 flex justify-between items-center">
+                                  <div>
+                                    <h4 className="font-medium text-gray-900">{bundleTitle}</h4>
+                                    <p className="text-sm text-gray-600 mt-1">Quantity: 1</p>
+                                  </div>
+                                  <div className="font-semibold text-[#273E8E]">{formatCurrency(bundleTotal)}</div>
+                                </div>
+                              </div>
+                            );
+                          }
+
                           if (!showInv && !showPan && !showBat) return null;
+                          if (fakeSplit) return null;
                           return (
                             <div className="mb-4">
                               <h3 className="font-semibold text-gray-900 mb-3">Product Breakdown</h3>
@@ -5111,47 +5455,83 @@ const BNPLBuyNow: React.FC = () => {
                         <div className="mb-4">
                           <h3 className="font-semibold text-gray-900 mb-3">Fees Breakdown</h3>
                           <div className="space-y-2 border border-gray-200 rounded-lg p-4">
-                            {orderInvoice.invoice.material_cost && (
+                            {orderInvoice.invoice.items_subtotal_before_discount != null && (
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-600 font-medium">Items subtotal:</span>
+                                <span className="font-semibold">{formatCurrency(orderInvoice.invoice.items_subtotal_before_discount)}</span>
+                              </div>
+                            )}
+                            {orderInvoice.invoice.outright_discount_amount != null && Number(orderInvoice.invoice.outright_discount_amount) > 0 && (
+                              <div className="flex justify-between text-sm text-red-600">
+                                <span>
+                                  Outright discount
+                                  {orderInvoice.invoice.outright_discount_percentage != null
+                                    ? ` (${orderInvoice.invoice.outright_discount_percentage}%)`
+                                    : ""}
+                                  :
+                                </span>
+                                <span className="font-medium">−{formatCurrency(orderInvoice.invoice.outright_discount_amount)}</span>
+                              </div>
+                            )}
+                            {orderInvoice.invoice.subtotal != null && (
+                              <div className="flex justify-between text-sm border-b border-gray-200 pb-2">
+                                <span className="text-gray-600 font-medium">Items after discount:</span>
+                                <span className="font-semibold">{formatCurrency(orderInvoice.invoice.subtotal)}</span>
+                              </div>
+                            )}
+                            {orderInvoice.invoice.material_cost != null && Number(orderInvoice.invoice.material_cost) > 0 && (
                               <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Material Cost:</span>
                                 <span className="font-medium">{formatCurrency(orderInvoice.invoice.material_cost)}</span>
                               </div>
                             )}
-                            {orderInvoice.invoice.installation_fee && (
+                            {orderInvoice.invoice.installation_fee != null && Number(orderInvoice.invoice.installation_fee) > 0 && (
                               <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Installation Fee:</span>
                                 <span className="font-medium">{formatCurrency(orderInvoice.invoice.installation_fee)}</span>
                               </div>
                             )}
-                            {orderInvoice.invoice.delivery_fee && (
+                            {orderInvoice.invoice.delivery_fee != null && Number(orderInvoice.invoice.delivery_fee) > 0 && (
                               <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Delivery Fee:</span>
                                 <span className="font-medium">{formatCurrency(orderInvoice.invoice.delivery_fee)}</span>
                               </div>
                             )}
-                            {orderInvoice.invoice.inspection_fee && (
+                            {orderInvoice.invoice.inspection_fee != null && Number(orderInvoice.invoice.inspection_fee) > 0 && (
                               <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Inspection Fee:</span>
                                 <span className="font-medium">{formatCurrency(orderInvoice.invoice.inspection_fee)}</span>
                               </div>
                             )}
-                            {orderInvoice.invoice.insurance_fee && (
+                            {orderInvoice.invoice.insurance_fee != null && Number(orderInvoice.invoice.insurance_fee) > 0 && (
                               <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Insurance Fee:</span>
                                 <span className="font-medium">{formatCurrency(orderInvoice.invoice.insurance_fee)}</span>
                               </div>
                             )}
-                            {orderInvoice.invoice.subtotal && (
+                            {orderInvoice.invoice.sum_before_vat != null && (
                               <div className="flex justify-between text-sm border-t border-gray-200 pt-2 mt-2">
-                                <span className="text-gray-600 font-medium">Subtotal:</span>
-                                <span className="font-semibold">{formatCurrency(orderInvoice.invoice.subtotal)}</span>
+                                <span className="text-gray-600 font-medium">Sum before VAT:</span>
+                                <span className="font-semibold">{formatCurrency(orderInvoice.invoice.sum_before_vat)}</span>
                               </div>
                             )}
-                            {orderInvoice.invoice.total && (
+                            {orderInvoice.invoice.vat_amount != null && Number(orderInvoice.invoice.vat_amount) > 0 && (
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-600">
+                                  VAT
+                                  {orderInvoice.invoice.vat_percentage != null
+                                    ? ` (${orderInvoice.invoice.vat_percentage}%)`
+                                    : ""}
+                                  :
+                                </span>
+                                <span className="font-medium">{formatCurrency(orderInvoice.invoice.vat_amount)}</span>
+                              </div>
+                            )}
+                            {(orderInvoice.invoice.grand_total ?? orderInvoice.invoice.total) != null && (
                               <div className="flex justify-between text-sm border-t-2 border-[#273E8E] pt-2 mt-2">
-                                <span className="text-gray-900 font-bold">Total:</span>
+                                <span className="text-gray-900 font-bold">Total paid:</span>
                                 <span className="font-bold text-[#273E8E] text-lg">
-                                  {formatCurrency(orderInvoice.invoice.total)}
+                                  {formatCurrency(orderInvoice.invoice.grand_total ?? orderInvoice.invoice.total)}
                                 </span>
                               </div>
                             )}
@@ -5207,16 +5587,7 @@ const BNPLBuyNow: React.FC = () => {
                 onClick={() => {
                   setShowStatusModal(false);
                   setSelectedItem(null);
-                  setStatusForm({
-                    status: "",
-                    admin_notes: "",
-                    counter_offer_min_deposit: "",
-                    counter_offer_min_tenor: "",
-                    property_state: "",
-                    property_address: "",
-                    contact_name: "",
-                    contact_phone: "",
-                  });
+                  setStatusForm(emptyStatusForm());
                 }}
                 className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100 transition-colors"
               >
@@ -5282,10 +5653,82 @@ const BNPLBuyNow: React.FC = () => {
                 </select>
                 {activeTab === "Audit Requests" && (
                   <p className="mt-2 text-xs text-gray-600">
-                    Approved sends a confirmation email to the customer. Rejected sends an update email. Completed is not used here.
+                    Approved sends a confirmation email with payment date, time, amount, and account details. Rejected sends an update email.
                   </p>
                 )}
               </div>
+
+              {activeTab === "Audit Requests" && statusForm.status === "approved" && (
+                <div className="rounded-xl border border-[#273E8E]/20 bg-[#F5F7FF] p-4 space-y-3">
+                  <p className="text-sm font-semibold text-[#273E8E]">
+                    Audit payment details (sent to customer by email)
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    The customer must pay for the audit. These fields are included in the approval email.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Payment date *
+                      </label>
+                      <input
+                        type="date"
+                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                        value={statusForm.approval_payment_date}
+                        onChange={(e) =>
+                          setStatusForm({ ...statusForm, approval_payment_date: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Payment time *
+                      </label>
+                      <input
+                        type="time"
+                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                        value={statusForm.approval_payment_time}
+                        onChange={(e) =>
+                          setStatusForm({ ...statusForm, approval_payment_time: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Payment amount (₦) *
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                      placeholder="e.g. 50000"
+                      value={statusForm.approval_payment_amount}
+                      onChange={(e) =>
+                        setStatusForm({ ...statusForm, approval_payment_amount: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Payment account details *
+                    </label>
+                    <textarea
+                      className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                      rows={3}
+                      placeholder="Bank name, account name, account number, etc."
+                      value={statusForm.approval_payment_account_details}
+                      onChange={(e) =>
+                        setStatusForm({
+                          ...statusForm,
+                          approval_payment_account_details: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+              )}
 
               {statusForm.status === "approved" && activeTab === "BNPL Applications" && (
                 <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800">
@@ -5439,7 +5882,7 @@ const BNPLBuyNow: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Admin Notes (Optional)
+                  {activeTab === "Audit Requests" ? "Additional notes (optional)" : "Admin Notes (Optional)"}
                 </label>
                 <textarea
                   className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
@@ -5458,16 +5901,7 @@ const BNPLBuyNow: React.FC = () => {
                 onClick={() => {
                   setShowStatusModal(false);
                   setSelectedItem(null);
-                  setStatusForm({
-                    status: "",
-                    admin_notes: "",
-                    counter_offer_min_deposit: "",
-                    counter_offer_min_tenor: "",
-                    property_state: "",
-                    property_address: "",
-                    contact_name: "",
-                    contact_phone: "",
-                  });
+                  setStatusForm(emptyStatusForm());
                 }}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
               >
@@ -5630,26 +6064,20 @@ const BNPLBuyNow: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Select User *
                 </label>
-                <select
+                <UserSearchSelect
                   value={createOrderForm.user_id}
-                  onChange={(e) =>
-                    setCreateOrderForm({ ...createOrderForm, user_id: e.target.value })
+                  onChange={(userId) =>
+                    setCreateOrderForm({ ...createOrderForm, user_id: userId })
                   }
-                  className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
-                  required
-                >
-                  <option value="">Select a user</option>
-                  {auditUsersData?.data?.data?.map((user: any) => (
-                      <option key={user.id} value={user.id}>
-                        {user.name} - {user.email}
-                      </option>
-                    ))}
-                  {(!auditUsersData?.data?.data || auditUsersData.data.data.length === 0) && (
-                    <option value="" disabled>
-                      No users with audit requests available
-                    </option>
-                  )}
-                </select>
+                  users={customOrderUsers}
+                  loading={allUsersLoading}
+                  placeholder="Search by name, email, phone, BVN, or user ID…"
+                  emptyMessage={
+                    allUsersLoading
+                      ? "Loading users…"
+                      : "No users match your search"
+                  }
+                />
               </div>
 
               {/* Order Type */}
@@ -6378,6 +6806,12 @@ const BNPLBuyNow: React.FC = () => {
                               {request.property_state && (
                                 <div>
                                   <span className="font-medium">State:</span> {request.property_state}
+                                </div>
+                              )}
+                              {(request.preferred_audit_date || request.preferred_audit_time) && (
+                                <div>
+                                  <span className="font-medium">Preferred schedule:</span>{" "}
+                                  {formatAuditPreferredSchedule(request)}
                                 </div>
                               )}
                               {request.property_floors && (

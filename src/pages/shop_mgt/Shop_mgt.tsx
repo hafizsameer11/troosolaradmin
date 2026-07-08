@@ -11,6 +11,7 @@ import images from "../../constants/images";
 import LoadingSpinner from "../../components/common/LoadingSpinner";
 import StatsLoadingSkeleton from "../../components/common/StatsLoadingSkeleton";
 import CheckoutShopSettings from "./CheckoutShopSettings";
+import ProductReviewsAdmin from "./ProductReviewsAdmin";
 
 //Code Related to the Integration
 import { getAllOrders } from "../../utils/queries/orders";
@@ -362,6 +363,15 @@ const Shop_mgt = () => {
                   onClick={() => setActiveTab("Checkout settings")}
                 >
                   Checkout settings
+                </button>
+                <button
+                  className={`py-2 px-1 border-b-4 font-medium text-md cursor-pointer ${activeTab === "Reviews"
+                    ? "border-[#273E8E] text-black"
+                    : "border-transparent text-[#00000080]"
+                    }`}
+                  onClick={() => setActiveTab("Reviews")}
+                >
+                  Reviews
                 </button>
               </nav>
 
@@ -761,6 +771,8 @@ const Shop_mgt = () => {
         {activeTab === "Products" && <Product />}
 
         {activeTab === "Checkout settings" && <CheckoutShopSettings />}
+
+        {activeTab === "Reviews" && <ProductReviewsAdmin />}
       </div>
 
       {/* Order Detail Modal */}

@@ -9,19 +9,21 @@ import Product from "./Product.tsx";
 import CalculatorSettings from "./CalculatorSettings.tsx";
 import PricingRewardsSettings from "./PricingRewardsSettings.tsx";
 import ProductFinancingSettings from "./ProductFinancingSettings.tsx";
+import FaqsSettings from "./FaqsSettings.tsx";
+import TicketSubjectsSettings from "./TicketSubjectsSettings.tsx";
 
 
 
 const Settings = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const tabFromUrl = searchParams.get("tab") as "admins" | "tools" | "calculator" | "pricing-rewards" | "product" | "product-financing" | "financing" | "notifications" | null;
+  const tabFromUrl = searchParams.get("tab") as "admins" | "tools" | "calculator" | "pricing-rewards" | "product" | "product-financing" | "financing" | "notifications" | "faqs" | "support" | null;
   const isInternalUpdate = useRef(false);
   
   // Initialize activeTab from URL or default to "admins"
   const [activeTab, setActiveTab] = useState<
-    "admins" | "tools" | "calculator" | "pricing-rewards" | "product" | "product-financing" | "financing" | "notifications"
+    "admins" | "tools" | "calculator" | "pricing-rewards" | "product" | "product-financing" | "financing" | "notifications" | "faqs" | "support"
   >(() => {
-    if (tabFromUrl && ["admins", "tools", "calculator", "pricing-rewards", "product", "product-financing", "financing", "notifications"].includes(tabFromUrl)) {
+    if (tabFromUrl && ["admins", "tools", "calculator", "pricing-rewards", "product", "product-financing", "financing", "notifications", "faqs", "support"].includes(tabFromUrl)) {
       return tabFromUrl;
     }
     return "admins";
@@ -43,7 +45,7 @@ const Settings = () => {
       isInternalUpdate.current = false;
       return;
     }
-    if (tabFromUrl && ["admins", "tools", "calculator", "pricing-rewards", "product", "product-financing", "financing", "notifications"].includes(tabFromUrl) && tabFromUrl !== activeTab) {
+    if (tabFromUrl && ["admins", "tools", "calculator", "pricing-rewards", "product", "product-financing", "financing", "notifications", "faqs", "support"].includes(tabFromUrl) && tabFromUrl !== activeTab) {
       setActiveTab(tabFromUrl);
     }
   }, [tabFromUrl, activeTab]);
@@ -57,6 +59,8 @@ const Settings = () => {
     { id: "product-financing", label: "Product Financing" },
     { id: "financing", label: "Financing Partner" },
     { id: "notifications", label: "Notifications" },
+    { id: "faqs", label: "FAQs" },
+    { id: "support", label: "Support subjects" },
   ];
 
   return (
@@ -96,6 +100,8 @@ const Settings = () => {
           {activeTab === "product-financing" && <ProductFinancingSettings />}
           {activeTab === "financing" && <FinancingPartner />}
           {activeTab === "notifications" && <Notifications />}
+          {activeTab === "faqs" && <FaqsSettings />}
+          {activeTab === "support" && <TicketSubjectsSettings />}
         </div>
       </div>
     </div>

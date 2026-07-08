@@ -37,6 +37,10 @@ type BundleProductPayload = {
   custom_services?: {
     title: string;
     service_amount: number;
+    flow_type?: "buy_now" | "bnpl";
+    quantity?: number;
+    unit?: string;
+    quantity_applies?: boolean;
   }[];
   product_model?: string;
   system_capacity_display?: string;
@@ -111,14 +115,8 @@ export const addBundle = async (
     });
   }
 
-  if (data.custom_services && data.custom_services.length > 0) {
-    data.custom_services.forEach((service, index) => {
-      formData.append(`custom_services[${index}][title]`, service.title);
-      formData.append(
-        `custom_services[${index}][service_amount]`,
-        service.service_amount.toString()
-      );
-    });
+  if (data.custom_services !== undefined) {
+    formData.append("custom_services", JSON.stringify(data.custom_services));
   }
 
   if (data.product_model) formData.append("product_model", data.product_model);
@@ -208,11 +206,8 @@ export const updateBundle = async (
     });
   }
 
-  if (data.custom_services !== undefined && Array.isArray(data.custom_services)) {
-    data.custom_services.forEach((svc, i) => {
-      formData.append(`custom_services[${i}][title]`, svc.title || "");
-      formData.append(`custom_services[${i}][service_amount]`, String(svc.service_amount ?? 0));
-    });
+  if (data.custom_services !== undefined) {
+    formData.append("custom_services", JSON.stringify(data.custom_services));
   }
 
   if (data.product_model) formData.append("product_model", data.product_model);

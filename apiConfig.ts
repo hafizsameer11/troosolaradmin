@@ -17,6 +17,8 @@ const API_ENDPOINTS = {
 
     // --- Users (admin view) ---
     UsersList: API_DOMAIN + "/all-users", // GET
+    AdminsList: API_DOMAIN + "/admin/admins", // GET
+    CurrentAdmin: API_DOMAIN + "/admin/me", // GET
     UserUpdate: (id: number | string) => `${API_DOMAIN}/update-user/${id}`, // POST
     UserShow: (id: number | string) => `${API_DOMAIN}/single-user/${id}`, // GET
 
@@ -216,6 +218,17 @@ const API_ENDPOINTS = {
     SiteBannerGet: API_DOMAIN + "/admin/site/banner", // GET
     SiteBannerUpload: API_DOMAIN + "/admin/site/banner", // POST multipart: banner
     SiteBannerDelete: API_DOMAIN + "/admin/site/banner", // DELETE
+
+    SiteFaqsList: API_DOMAIN + "/admin/site/faqs", // GET
+    SiteFaqReorder: API_DOMAIN + "/admin/site/faqs/reorder", // POST
+    SiteFaqCreate: API_DOMAIN + "/admin/site/faqs", // POST
+    SiteFaqUpdate: (id: number | string) => `${API_DOMAIN}/admin/site/faqs/${id}`, // PUT
+    SiteFaqDelete: (id: number | string) => `${API_DOMAIN}/admin/site/faqs/${id}`, // DELETE
+
+    TicketSubjectsList: API_DOMAIN + "/admin/site/ticket-subjects", // GET
+    TicketSubjectCreate: API_DOMAIN + "/admin/site/ticket-subjects", // POST
+    TicketSubjectUpdate: (id: number | string) => `${API_DOMAIN}/admin/site/ticket-subjects/${id}`, // PUT
+    TicketSubjectDelete: (id: number | string) => `${API_DOMAIN}/admin/site/ticket-subjects/${id}`, // DELETE
 
     // --- Calculator Settings ---
     CalculatorSettingsGet: API_DOMAIN + "/admin/calculator-settings", // GET

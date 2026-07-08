@@ -26,7 +26,7 @@ type AddUserPayload = {
   phone: string;
   bvn: string;
   password: string;
-  role: "Admin";
+  role: "admin" | "super_admin";
 };
 
 const AddNewAdminModal: React.FC<Props> = ({
@@ -115,14 +115,14 @@ const AddNewAdminModal: React.FC<Props> = ({
       return;
     }
 
-    // Submit the form with default role 'Admin'
+    // Only super admins can create admin accounts (enforced on backend too).
     addUserMutation.mutate({
       first_name: newUser.name,
       email: newUser.email,
       phone: newUser.phone,
       bvn: newUser.bvn,
       password: newUser.password,
-      role: "Admin",
+      role: "admin",
     });
   };
 
