@@ -7,7 +7,6 @@ export type CheckoutSettingsPayload = {
   category_installation_fees?: Record<string, number>;
   category_materials_fees?: Record<string, number>;
   category_inspection_fees?: Record<string, number>;
-  own_installer_include_inspection?: boolean;
   delivery_min_working_days?: number;
   delivery_max_working_days?: number;
   /** @deprecated legacy flat NGN */
