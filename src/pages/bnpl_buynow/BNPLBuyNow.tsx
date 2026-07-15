@@ -1606,6 +1606,71 @@ const BNPLBuyNow: React.FC = () => {
     );
   };
 
+  /** troosolar → installation date; own → delivery date */
+  const resolveOrderInstallerChoice = (item: any, summary?: any): "own" | "troosolar" | null => {
+    const raw = String(item?.installer_choice || summary?.installer_choice || "")
+      .toLowerCase()
+      .trim();
+    if (raw === "own" || raw === "troosolar") return raw;
+
+    // Older Buy Now orders had no installer_choice column — infer from fee rules.
+    const orderType = String(item?.order_type || summary?.order_type || "").toLowerCase();
+    if (orderType === "buy_now") {
+      const install = Number(
+        item?.installation_price ?? item?.installation_fee ?? summary?.installation_fee ?? 0
+      );
+      const inspect = Number(item?.inspection_fee ?? summary?.inspection_fee ?? 0);
+      if (install <= 0 && inspect <= 0) return "own";
+      return "troosolar";
+    }
+    return null;
+  };
+
+  const getRequestedServiceDateLabel = (item: any, summary?: any) => {
+    const choice = resolveOrderInstallerChoice(item, summary);
+    if (choice === "own") return "Requested delivery date";
+    if (choice === "troosolar") return "Requested installation date";
+    return "Requested installation / delivery date";
+  };
+
+  const getSiteSectionTitle = (item: any, summary?: any) => {
+    const choice = resolveOrderInstallerChoice(item, summary);
+    if (choice === "own") return "Delivery site";
+    if (choice === "troosolar") return "Installation site";
+    return "Installation / delivery site";
+  };
+
+  const formatCustomerTypeLabel = (type: unknown): string | null => {
+    if (type == null || type === "") return null;
+    const t = String(type).toLowerCase().trim();
+    if (t === "sme") return "For SME";
+    if (t === "residential") return "For Residential";
+    if (t === "commercial") return "For Commercial";
+    return String(type).replace(/_/g, " ");
+  };
+
+  const resolveOrderCustomerType = (item: any, summary?: any) =>
+    formatCustomerTypeLabel(
+      item?.customer_type ||
+        summary?.customer_type ||
+        item?.loan_application?.customer_type ||
+        null
+    );
+
+  const resolveOrderPropertyField = (key: string, item: any, summary?: any) => {
+    const fromItem = item?.[key];
+    if (fromItem !== undefined && fromItem !== null && fromItem !== "") return fromItem;
+    const fromSummary = summary?.[key];
+    if (fromSummary !== undefined && fromSummary !== null && fromSummary !== "") return fromSummary;
+    return null;
+  };
+
+  const orderGatedEstateLabel = (value: unknown): string => {
+    if (value === true || value === 1 || value === "1" || value === "true") return "Yes";
+    if (value === false || value === 0 || value === "0" || value === "false") return "No";
+    return "—";
+  };
+
   const currentData = getCurrentData();
   // Support both paginated response (data.data, data.total) and direct array
   const items =
@@ -3000,6 +3065,26 @@ const BNPLBuyNow: React.FC = () => {
                               </div>
                             );
                           })()}
+                        {(activeTab === "Buy Now Orders" || activeTab === "BNPL Orders") &&
+                          resolveOrderCustomerType(selectedItem, orderSummary) && (
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Customer type</p>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {resolveOrderCustomerType(selectedItem, orderSummary)}
+                            </p>
+                          </div>
+                        )}
+                        {activeTab === "Buy Now Orders" &&
+                          resolveOrderInstallerChoice(selectedItem, orderSummary) && (
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Installer</p>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {resolveOrderInstallerChoice(selectedItem, orderSummary) === "own"
+                                ? "Use my own installer"
+                                : "TrooSolar installer"}
+                            </p>
+                          </div>
+                        )}
                         {activeTab === "BNPL Orders" && selectedItem.loan_application?.product_category && (
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Product Category</p>
@@ -3019,7 +3104,9 @@ const BNPLBuyNow: React.FC = () => {
                         {(activeTab === "Buy Now Orders" || activeTab === "BNPL Orders") &&
                           getRequestedServiceDate(selectedItem, orderSummary) && (
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Requested installation / delivery date</p>
+                            <p className="text-xs text-gray-500 mb-1">
+                              {getRequestedServiceDateLabel(selectedItem, orderSummary)}
+                            </p>
                             <p className="text-sm font-semibold text-gray-900">
                               {formatDate(getRequestedServiceDate(selectedItem, orderSummary))}
                             </p>
@@ -3062,6 +3149,14 @@ const BNPLBuyNow: React.FC = () => {
                               <p className="text-sm font-medium text-gray-900">#{selectedItem.user.id}</p>
                             </div>
                           )}
+                          {resolveOrderCustomerType(selectedItem, orderSummary) && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Customer type</p>
+                              <p className="text-sm font-medium text-gray-900">
+                                {resolveOrderCustomerType(selectedItem, orderSummary)}
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -3073,7 +3168,7 @@ const BNPLBuyNow: React.FC = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                           </svg>
-                          Installation / delivery site
+                          {getSiteSectionTitle(selectedItem, orderSummary)}
                         </h3>
                         <p className="text-xs text-gray-500 mb-3">
                           Address and contact used for this order (may differ from account phone).
@@ -3105,9 +3200,59 @@ const BNPLBuyNow: React.FC = () => {
                               {selectedItem.delivery_address.address || "—"}
                             </p>
                           </div>
+                          {resolveOrderPropertyField("property_floors", selectedItem, orderSummary) != null && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">No. of floors</p>
+                              <p className="text-sm font-medium text-gray-900">
+                                {String(resolveOrderPropertyField("property_floors", selectedItem, orderSummary))}
+                              </p>
+                            </div>
+                          )}
+                          {resolveOrderPropertyField("property_rooms", selectedItem, orderSummary) != null && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">No. of rooms</p>
+                              <p className="text-sm font-medium text-gray-900">
+                                {String(resolveOrderPropertyField("property_rooms", selectedItem, orderSummary))}
+                              </p>
+                            </div>
+                          )}
+                          {resolveOrderPropertyField("is_gated_estate", selectedItem, orderSummary) !== null && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Gated estate</p>
+                              <p className="text-sm font-medium text-gray-900">
+                                {orderGatedEstateLabel(
+                                  resolveOrderPropertyField("is_gated_estate", selectedItem, orderSummary)
+                                )}
+                              </p>
+                            </div>
+                          )}
+                          {orderGatedEstateLabel(
+                            resolveOrderPropertyField("is_gated_estate", selectedItem, orderSummary)
+                          ) === "Yes" &&
+                            resolveOrderPropertyField("estate_name", selectedItem, orderSummary) && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Estate name</p>
+                              <p className="text-sm font-medium text-gray-900">
+                                {String(resolveOrderPropertyField("estate_name", selectedItem, orderSummary))}
+                              </p>
+                            </div>
+                          )}
+                          {orderGatedEstateLabel(
+                            resolveOrderPropertyField("is_gated_estate", selectedItem, orderSummary)
+                          ) === "Yes" &&
+                            resolveOrderPropertyField("estate_address", selectedItem, orderSummary) && (
+                            <div className="md:col-span-2">
+                              <p className="text-xs text-gray-500 mb-1">Estate address</p>
+                              <p className="text-sm font-medium text-gray-900 whitespace-pre-wrap">
+                                {String(resolveOrderPropertyField("estate_address", selectedItem, orderSummary))}
+                              </p>
+                            </div>
+                          )}
                           {getRequestedServiceDate(selectedItem, orderSummary) && (
                             <div className="md:col-span-2">
-                              <p className="text-xs text-gray-500 mb-1">Requested installation / delivery date</p>
+                              <p className="text-xs text-gray-500 mb-1">
+                                {getRequestedServiceDateLabel(selectedItem, orderSummary)}
+                              </p>
                               <p className="text-sm font-semibold text-gray-900">
                                 {formatDate(getRequestedServiceDate(selectedItem, orderSummary))}
                               </p>
@@ -3625,7 +3770,9 @@ const BNPLBuyNow: React.FC = () => {
                         )}
                         {getRequestedServiceDate(selectedItem) && (
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Requested installation / delivery date</p>
+                            <p className="text-xs text-gray-500 mb-1">
+                              {getRequestedServiceDateLabel(selectedItem)}
+                            </p>
                             <p className="text-sm font-semibold text-gray-900">
                               {formatDate(getRequestedServiceDate(selectedItem))}
                             </p>
@@ -5178,6 +5325,24 @@ const BNPLBuyNow: React.FC = () => {
                             </span>
                           </div>
                         )}
+                        {resolveOrderCustomerType(selectedItem, orderSummary) && (
+                          <div className="col-span-2">
+                            <span className="text-gray-600">Customer type:</span>
+                            <span className="ml-2 font-medium text-gray-900">
+                              {resolveOrderCustomerType(selectedItem, orderSummary)}
+                            </span>
+                          </div>
+                        )}
+                        {resolveOrderInstallerChoice(selectedItem, orderSummary) && (
+                          <div className="col-span-2">
+                            <span className="text-gray-600">Installer:</span>
+                            <span className="ml-2 font-medium text-gray-900">
+                              {resolveOrderInstallerChoice(selectedItem, orderSummary) === "own"
+                                ? "Use my own installer"
+                                : "TrooSolar installer"}
+                            </span>
+                          </div>
+                        )}
                         {(orderSummary.product_title || selectedItem.product?.title) && !orderSummary.bundle_title && !selectedItem.bundle?.title && (
                           <div className="col-span-2">
                             <span className="text-gray-600">Product:</span>
@@ -5188,7 +5353,9 @@ const BNPLBuyNow: React.FC = () => {
                         )}
                         {orderSummary.installation_requested_date && (
                           <div className="col-span-2">
-                            <span className="text-gray-600">Requested installation date:</span>
+                            <span className="text-gray-600">
+                              {getRequestedServiceDateLabel(selectedItem, orderSummary)}:
+                            </span>
                             <span className="ml-2 font-medium text-gray-900">
                               {formatDate(orderSummary.installation_requested_date)}
                             </span>
@@ -5196,12 +5363,33 @@ const BNPLBuyNow: React.FC = () => {
                         )}
                         {orderSummary.delivery_address && (
                           <div className="col-span-2 space-y-1 border-t border-gray-200 pt-3 mt-1">
-                            <p className="text-gray-600 font-medium">Installation / delivery site</p>
+                            <p className="text-gray-600 font-medium">
+                              {getSiteSectionTitle(selectedItem, orderSummary)}
+                            </p>
                             <p className="text-gray-800">
                               {[orderSummary.delivery_address.address, orderSummary.delivery_address.state]
                                 .filter(Boolean)
                                 .join(" · ")}
                             </p>
+                            {(resolveOrderPropertyField("property_floors", selectedItem, orderSummary) != null ||
+                              resolveOrderPropertyField("property_rooms", selectedItem, orderSummary) != null ||
+                              resolveOrderPropertyField("is_gated_estate", selectedItem, orderSummary) !== null) && (
+                              <p className="text-xs text-gray-500">
+                                {[
+                                  resolveOrderPropertyField("property_floors", selectedItem, orderSummary) != null
+                                    ? `Floors: ${resolveOrderPropertyField("property_floors", selectedItem, orderSummary)}`
+                                    : null,
+                                  resolveOrderPropertyField("property_rooms", selectedItem, orderSummary) != null
+                                    ? `Rooms: ${resolveOrderPropertyField("property_rooms", selectedItem, orderSummary)}`
+                                    : null,
+                                  resolveOrderPropertyField("is_gated_estate", selectedItem, orderSummary) !== null
+                                    ? `Gated estate: ${orderGatedEstateLabel(resolveOrderPropertyField("is_gated_estate", selectedItem, orderSummary))}`
+                                    : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </p>
+                            )}
                             <p className="text-xs text-gray-500">
                               Site phone: {orderSummary.delivery_address.phone_number || "—"}
                               {(() => {
