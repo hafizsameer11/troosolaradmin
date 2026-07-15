@@ -1548,16 +1548,47 @@ const BNPLBuyNow: React.FC = () => {
     return null;
   };
 
+  const filterOrderListRowsForInstaller = (rows: any[], item: any, summary?: any) => {
+    if (!Array.isArray(rows) || rows.length === 0) return [];
+    const installer = resolveOrderInstallerChoice(item, summary);
+    const materialCost = Number(
+      item?.material_cost ??
+        summary?.material_cost ??
+        item?.invoice?.material_cost ??
+        summary?.invoice?.material_cost ??
+        0
+    );
+    return rows.filter((row: any) => {
+      const label = String(row?.name || row?.description || row?.title || "")
+        .toLowerCase()
+        .trim();
+      const isMaterialLine =
+        label.includes("installation material") ||
+        label === "material cost" ||
+        label === "installation materials cost";
+      if (!isMaterialLine) return true;
+      if (installer === "own") return false;
+      if (materialCost <= 0) return false;
+      return true;
+    });
+  };
+
   const resolveModalOrderItems = (summary: any, item: any) => {
-    if (summary?.items?.length) return summary.items;
-    const raw = item?.items;
-    if (!Array.isArray(raw) || raw.length === 0) return [];
-    return raw.map((row: any) => ({
-      name: row.item?.title || row.itemable?.title || row.name || "Item",
-      description: row.item?.subtitle || row.item?.title || row.itemable?.title || "",
-      quantity: row.quantity ?? 1,
-      price: Number(row.unit_price ?? row.subtotal ?? 0),
-    }));
+    let rows: any[] = [];
+    if (summary?.items?.length) {
+      rows = summary.items;
+    } else {
+      const raw = item?.items;
+      if (!Array.isArray(raw) || raw.length === 0) return [];
+      rows = raw.map((row: any) => ({
+        name: row.item?.title || row.itemable?.title || row.name || "Item",
+        description: row.item?.subtitle || row.item?.title || row.itemable?.title || "",
+        quantity: row.quantity ?? 1,
+        price: Number(row.unit_price ?? row.subtotal ?? 0),
+      }));
+    }
+
+    return filterOrderListRowsForInstaller(rows, item, summary);
   };
 
   const renderOrderItemsList = (items: any[]) => {
@@ -5405,10 +5436,10 @@ const BNPLBuyNow: React.FC = () => {
                       </div>
                     </div>
 
-                    {orderSummary.items && orderSummary.items.length > 0 && (
+                    {resolveModalOrderItems(orderSummary, selectedItem).length > 0 && (
                       <div className="mb-4">
                         <h3 className="font-semibold text-gray-900 mb-3">Order Items</h3>
-                        {renderOrderItemsList(orderSummary.items)}
+                        {renderOrderItemsList(resolveModalOrderItems(orderSummary, selectedItem))}
                       </div>
                     )}
 
@@ -5470,8 +5501,16 @@ const BNPLBuyNow: React.FC = () => {
                       <div className="space-y-4">
                         {/* Product breakdown: prefer per-line bundle materials from API; else legacy 3-bucket summary */}
                         {(() => {
-                          const productLineItems = orderInvoice.invoice.product_line_items;
-                          const lineItems = orderInvoice.invoice.bundle_line_items;
+                          const productLineItems = filterOrderListRowsForInstaller(
+                            orderInvoice.invoice.product_line_items || [],
+                            selectedItem,
+                            orderInvoice
+                          );
+                          const lineItems = filterOrderListRowsForInstaller(
+                            orderInvoice.invoice.bundle_line_items || [],
+                            selectedItem,
+                            orderInvoice
+                          );
                           const bundleTitle =
                             orderInvoice.bundle_title ||
                             selectedItem?.bundle?.title ||
