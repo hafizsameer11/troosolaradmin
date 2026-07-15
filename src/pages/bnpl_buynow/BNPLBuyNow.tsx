@@ -5148,12 +5148,6 @@ const BNPLBuyNow: React.FC = () => {
                           <span className="text-gray-600">Order Number:</span>
                           <span className="ml-2 font-medium">{orderSummary.order_number || selectedItem.id}</span>
                         </div>
-                        <div>
-                          <span className="text-gray-600">Total Price:</span>
-                          <span className="ml-2 font-medium text-[#273E8E]">
-                            {formatCurrency(orderSummary.total_price || selectedItem.total_price)}
-                          </span>
-                        </div>
                         {(orderSummary.bundle_title || selectedItem.bundle?.title) && (
                           <div className="col-span-2">
                             <span className="text-gray-600">Bundle:</span>
@@ -5207,34 +5201,6 @@ const BNPLBuyNow: React.FC = () => {
                         {renderOrderItemsList(orderSummary.items)}
                       </div>
                     )}
-
-                    {(() => {
-                      const feeRows = [
-                        { label: "Product subtotal", value: orderSummary.product_price },
-                        { label: "Installation fee", value: orderSummary.installation_fee },
-                        { label: "Material cost", value: orderSummary.material_cost },
-                        { label: "Delivery fee", value: orderSummary.delivery_fee },
-                        { label: "Inspection fee", value: orderSummary.inspection_fee },
-                        { label: "Insurance fee", value: orderSummary.insurance_fee },
-                        { label: "VAT", value: orderSummary.vat_amount },
-                      ].filter((row) => row.value != null && Number(row.value) > 0);
-
-                      if (feeRows.length === 0) return null;
-
-                      return (
-                        <div className="mb-4 bg-white border border-gray-200 rounded-lg p-4">
-                          <h3 className="font-semibold text-gray-900 mb-3">Charges &amp; fees</h3>
-                          <div className="space-y-2 text-sm">
-                            {feeRows.map((row) => (
-                              <div key={row.label} className="flex justify-between gap-4">
-                                <span className="text-gray-600">{row.label}</span>
-                                <span className="font-medium text-gray-900">{formatCurrency(row.value)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })()}
 
                     {orderSummary.appliances &&
                       !(
