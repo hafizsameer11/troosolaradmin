@@ -1487,6 +1487,37 @@ const BNPLBuyNow: React.FC = () => {
 
   const getOrderBundleOrProductTitle = (item: any, summary?: any): string | null => {
     if (!item && !summary) return null;
+
+    // Prefer bundle / product title (same source as Summary tab) — not material line dumps.
+    const bundleTitle =
+      summary?.bundle_title ||
+      item?.bundle?.title ||
+      item?.bundle?.name ||
+      null;
+    if (bundleTitle) return String(bundleTitle);
+
+    const productTitle =
+      summary?.product_title ||
+      item?.product?.title ||
+      item?.product?.name ||
+      null;
+    if (productTitle) return String(productTitle);
+
+    const firstLine = item?.items?.[0];
+    const firstIsBundle =
+      firstLine &&
+      String(firstLine.itemable_type || firstLine.type || "")
+        .toLowerCase()
+        .includes("bundle");
+    if (firstIsBundle) {
+      const t =
+        firstLine.item?.title ||
+        firstLine.itemable?.title ||
+        firstLine.title ||
+        firstLine.name;
+      if (t) return String(t);
+    }
+
     const summaryItems = summary?.items;
     if (Array.isArray(summaryItems) && summaryItems.length > 0) {
       return summaryItems
@@ -1497,16 +1528,12 @@ const BNPLBuyNow: React.FC = () => {
         })
         .join(", ");
     }
-    if (item?.bundle?.title) return String(item.bundle.title);
-    if (item?.product?.title) return String(item.product.title);
-    if (summary?.bundle_title) return String(summary.bundle_title);
-    if (summary?.product_title) return String(summary.product_title);
-    const firstItem = item?.items?.[0];
-    if (firstItem) {
-      if (firstItem.item?.title) return String(firstItem.item.title);
-      if (firstItem.itemable?.title) return String(firstItem.itemable.title);
-      if (firstItem.title) return String(firstItem.title);
-      if (firstItem.name) return String(firstItem.name);
+
+    if (firstLine) {
+      if (firstLine.item?.title) return String(firstLine.item.title);
+      if (firstLine.itemable?.title) return String(firstLine.itemable.title);
+      if (firstLine.title) return String(firstLine.title);
+      if (firstLine.name) return String(firstLine.name);
     }
     return null;
   };
@@ -2940,9 +2967,13 @@ const BNPLBuyNow: React.FC = () => {
                         {(activeTab === "Buy Now Orders" || activeTab === "BNPL Orders") &&
                           (() => {
                             const bundleProductTitle = getOrderBundleOrProductTitle(selectedItem, orderSummary);
+                            const hasBundle =
+                              !!(orderSummary?.bundle_title || selectedItem?.bundle?.title);
                             return bundleProductTitle ? (
                               <div className="md:col-span-2">
-                                <p className="text-xs text-gray-500 mb-1">Selected items</p>
+                                <p className="text-xs text-gray-500 mb-1">
+                                  {hasBundle ? "Bundle" : "Selected items"}
+                                </p>
                                 <p className="text-sm font-semibold text-gray-900">{bundleProductTitle}</p>
                               </div>
                             ) : null;
