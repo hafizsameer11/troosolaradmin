@@ -1488,20 +1488,13 @@ const BNPLBuyNow: React.FC = () => {
   const getOrderBundleOrProductTitle = (item: any, summary?: any): string | null => {
     if (!item && !summary) return null;
 
-    // Prefer bundle / product title (same source as Summary tab) — not material line dumps.
+    // Bundle orders: show the bundle name, not component material lines.
     const bundleTitle =
       summary?.bundle_title ||
       item?.bundle?.title ||
       item?.bundle?.name ||
       null;
     if (bundleTitle) return String(bundleTitle);
-
-    const productTitle =
-      summary?.product_title ||
-      item?.product?.title ||
-      item?.product?.name ||
-      null;
-    if (productTitle) return String(productTitle);
 
     const firstLine = item?.items?.[0];
     const firstIsBundle =
@@ -1518,23 +1511,40 @@ const BNPLBuyNow: React.FC = () => {
       if (t) return String(t);
     }
 
-    const summaryItems = summary?.items;
-    if (Array.isArray(summaryItems) && summaryItems.length > 0) {
-      return summaryItems
-        .map((row: any) => {
-          const label = row.name || row.title || "Item";
-          const q = row.quantity && Number(row.quantity) > 1 ? ` (×${row.quantity})` : "";
-          return `${label}${q}`;
-        })
-        .join(", ");
+    const formatLineLabel = (row: any): string | null => {
+      const label =
+        row?.name ||
+        row?.title ||
+        row?.item?.title ||
+        row?.itemable?.title ||
+        null;
+      if (!label) return null;
+      const q = row?.quantity && Number(row.quantity) > 1 ? ` (×${row.quantity})` : "";
+      return `${label}${q}`;
+    };
+
+    // Multi-product Buy Now: join every line item — don't stop at orders.product_title (first only).
+    const summaryLabels = Array.isArray(summary?.items)
+      ? summary.items.map(formatLineLabel).filter(Boolean)
+      : [];
+    if (summaryLabels.length > 0) {
+      return summaryLabels.join(", ");
     }
 
-    if (firstLine) {
-      if (firstLine.item?.title) return String(firstLine.item.title);
-      if (firstLine.itemable?.title) return String(firstLine.itemable.title);
-      if (firstLine.title) return String(firstLine.title);
-      if (firstLine.name) return String(firstLine.name);
+    const orderItemLabels = Array.isArray(item?.items)
+      ? item.items.map(formatLineLabel).filter(Boolean)
+      : [];
+    if (orderItemLabels.length > 0) {
+      return orderItemLabels.join(", ");
     }
+
+    const productTitle =
+      summary?.product_title ||
+      item?.product?.title ||
+      item?.product?.name ||
+      null;
+    if (productTitle) return String(productTitle);
+
     return null;
   };
 
@@ -2969,14 +2979,26 @@ const BNPLBuyNow: React.FC = () => {
                             const bundleProductTitle = getOrderBundleOrProductTitle(selectedItem, orderSummary);
                             const hasBundle =
                               !!(orderSummary?.bundle_title || selectedItem?.bundle?.title);
-                            return bundleProductTitle ? (
+                            if (!bundleProductTitle) return null;
+                            const titleParts = hasBundle
+                              ? [bundleProductTitle]
+                              : bundleProductTitle.split(", ").filter(Boolean);
+                            return (
                               <div className="md:col-span-2">
                                 <p className="text-xs text-gray-500 mb-1">
                                   {hasBundle ? "Bundle" : "Selected items"}
                                 </p>
-                                <p className="text-sm font-semibold text-gray-900">{bundleProductTitle}</p>
+                                {titleParts.length > 1 ? (
+                                  <ul className="text-sm font-semibold text-gray-900 list-disc list-inside space-y-1">
+                                    {titleParts.map((title, idx) => (
+                                      <li key={`${title}-${idx}`}>{title}</li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <p className="text-sm font-semibold text-gray-900">{bundleProductTitle}</p>
+                                )}
                               </div>
-                            ) : null;
+                            );
                           })()}
                         {activeTab === "BNPL Orders" && selectedItem.loan_application?.product_category && (
                           <div>
