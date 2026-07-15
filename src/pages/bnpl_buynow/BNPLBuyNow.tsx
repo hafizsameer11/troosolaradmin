@@ -5497,7 +5497,7 @@ const BNPLBuyNow: React.FC = () => {
                                 <span>
                                   Outright discount
                                   {orderInvoice.invoice.outright_discount_percentage != null
-                                    ? ` (${orderInvoice.invoice.outright_discount_percentage}%)`
+                                    ? ` (${Math.round(Number(orderInvoice.invoice.outright_discount_percentage))}%)`
                                     : ""}
                                   :
                                 </span>
