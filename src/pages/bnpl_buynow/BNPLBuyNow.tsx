@@ -5448,92 +5448,119 @@ const BNPLBuyNow: React.FC = () => {
                           );
                         })()}
 
-                        {/* Fees Breakdown */}
-                        <div className="mb-4">
-                          <h3 className="font-semibold text-gray-900 mb-3">Fees Breakdown</h3>
-                          <div className="space-y-2 border border-gray-200 rounded-lg p-4">
-                            {orderInvoice.invoice.items_subtotal_before_discount != null && (
-                              <div className="flex justify-between text-sm">
-                                <span className="text-gray-600 font-medium">Items subtotal:</span>
-                                <span className="font-semibold">{formatCurrency(orderInvoice.invoice.items_subtotal_before_discount)}</span>
-                              </div>
-                            )}
-                            {orderInvoice.invoice.outright_discount_amount != null && Number(orderInvoice.invoice.outright_discount_amount) > 0 && (
-                              <div className="flex justify-between text-sm text-red-600">
-                                <span>
-                                  Outright discount
-                                  {orderInvoice.invoice.outright_discount_percentage != null
-                                    ? ` (${Math.round(Number(orderInvoice.invoice.outright_discount_percentage))}%)`
-                                    : ""}
-                                  :
-                                </span>
-                                <span className="font-medium">−{formatCurrency(orderInvoice.invoice.outright_discount_amount)}</span>
-                              </div>
-                            )}
-                            {orderInvoice.invoice.subtotal != null && (
-                              <div className="flex justify-between text-sm border-b border-gray-200 pb-2">
-                                <span className="text-gray-600 font-medium">Items after discount:</span>
-                                <span className="font-semibold">{formatCurrency(orderInvoice.invoice.subtotal)}</span>
-                              </div>
-                            )}
-                            {orderInvoice.invoice.material_cost != null && Number(orderInvoice.invoice.material_cost) > 0 && (
-                              <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Material Cost:</span>
-                                <span className="font-medium">{formatCurrency(orderInvoice.invoice.material_cost)}</span>
-                              </div>
-                            )}
-                            {orderInvoice.invoice.installation_fee != null && Number(orderInvoice.invoice.installation_fee) > 0 && (
-                              <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Installation Fee:</span>
-                                <span className="font-medium">{formatCurrency(orderInvoice.invoice.installation_fee)}</span>
-                              </div>
-                            )}
-                            {orderInvoice.invoice.delivery_fee != null && Number(orderInvoice.invoice.delivery_fee) > 0 && (
-                              <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Delivery Fee:</span>
-                                <span className="font-medium">{formatCurrency(orderInvoice.invoice.delivery_fee)}</span>
-                              </div>
-                            )}
-                            {orderInvoice.invoice.inspection_fee != null && Number(orderInvoice.invoice.inspection_fee) > 0 && (
-                              <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Inspection Fee:</span>
-                                <span className="font-medium">{formatCurrency(orderInvoice.invoice.inspection_fee)}</span>
-                              </div>
-                            )}
-                            {orderInvoice.invoice.insurance_fee != null && Number(orderInvoice.invoice.insurance_fee) > 0 && (
-                              <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Insurance Fee:</span>
-                                <span className="font-medium">{formatCurrency(orderInvoice.invoice.insurance_fee)}</span>
-                              </div>
-                            )}
-                            {orderInvoice.invoice.sum_before_vat != null && (
-                              <div className="flex justify-between text-sm border-t border-gray-200 pt-2 mt-2">
-                                <span className="text-gray-600 font-medium">Sum before VAT:</span>
-                                <span className="font-semibold">{formatCurrency(orderInvoice.invoice.sum_before_vat)}</span>
-                              </div>
-                            )}
-                            {orderInvoice.invoice.vat_amount != null && Number(orderInvoice.invoice.vat_amount) > 0 && (
-                              <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">
-                                  VAT
-                                  {orderInvoice.invoice.vat_percentage != null
-                                    ? ` (${orderInvoice.invoice.vat_percentage}%)`
-                                    : ""}
-                                  :
-                                </span>
-                                <span className="font-medium">{formatCurrency(orderInvoice.invoice.vat_amount)}</span>
-                              </div>
-                            )}
-                            {(orderInvoice.invoice.grand_total ?? orderInvoice.invoice.total) != null && (
-                              <div className="flex justify-between text-sm border-t-2 border-[#273E8E] pt-2 mt-2">
-                                <span className="text-gray-900 font-bold">Total paid:</span>
-                                <span className="font-bold text-[#273E8E] text-lg">
-                                  {formatCurrency(orderInvoice.invoice.grand_total ?? orderInvoice.invoice.total)}
+                        {/* Payment summary — same layout/labels as customer Buy Now PaymentSummaryCard */}
+                        {(() => {
+                          const inv = orderInvoice.invoice;
+                          const amt = (n: number | string | null | undefined) =>
+                            formatCurrencyLoanSummary(n);
+                          const row = (
+                            label: string,
+                            value: number | string | null | undefined,
+                            opts: { prefix?: string; emphasize?: boolean; valueClass?: string } = {}
+                          ) => {
+                            const n = Number(value || 0);
+                            if (!Number.isFinite(n) && value == null) return null;
+                            return (
+                              <div
+                                className={`flex justify-between items-center py-2.5 text-sm ${
+                                  opts.emphasize ? "font-medium" : ""
+                                }`}
+                              >
+                                <span className="text-gray-700">{label}</span>
+                                <span
+                                  className={`font-semibold tabular-nums ${
+                                    opts.valueClass || "text-gray-900"
+                                  }`}
+                                >
+                                  {opts.prefix || ""}
+                                  {amt(Math.abs(n))}
                                 </span>
                               </div>
-                            )}
-                          </div>
-                        </div>
+                            );
+                          };
+                          const Divider = () => (
+                            <hr className="border-0 border-t border-gray-300 my-1" />
+                          );
+                          const subTotal = Number(inv.items_subtotal_before_discount ?? 0);
+                          const discount = Number(inv.outright_discount_amount ?? 0);
+                          const discountPct = Math.round(
+                            Number(inv.outright_discount_percentage ?? 10)
+                          );
+                          const netTotal = Number(inv.subtotal ?? 0);
+                          const deliveryFee = Number(inv.delivery_fee ?? 0);
+                          const installationFee = Number(inv.installation_fee ?? 0);
+                          const inspectionFee = Number(inv.inspection_fee ?? 0);
+                          const materialCost = Number(inv.material_cost ?? 0);
+                          const totalAmount = Number(
+                            inv.sum_before_vat ??
+                              netTotal + deliveryFee + installationFee + inspectionFee + materialCost
+                          );
+                          const vatAmount = Number(inv.vat_amount ?? 0);
+                          const vatPct = Number(inv.vat_percentage ?? 7.5);
+                          const insuranceFee = Number(inv.insurance_fee ?? 0);
+                          const insurancePct = Number(inv.insurance_fee_percentage ?? 3);
+                          const grandTotal = Number(inv.grand_total ?? inv.total ?? 0);
+                          const hasServiceFees =
+                            deliveryFee > 0 ||
+                            installationFee > 0 ||
+                            inspectionFee > 0 ||
+                            materialCost > 0;
+
+                          return (
+                            <div className="mb-4 bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                              <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">
+                                  Payment summary
+                                </h3>
+                              </div>
+                              <div className="px-4 py-2">
+                                {row("Sub-Total", subTotal)}
+                                {discount > 0 &&
+                                  row(`Discount (${discountPct}%)`, discount, {
+                                    prefix: "-",
+                                    valueClass: "text-green-700",
+                                  })}
+                                {row("Net Total", netTotal, { emphasize: true })}
+                                {hasServiceFees && (
+                                  <>
+                                    <Divider />
+                                    {deliveryFee > 0 &&
+                                      row("Delivery Fee", deliveryFee, { prefix: "+" })}
+                                    {installationFee > 0 &&
+                                      row("Installation Fee", installationFee, { prefix: "+" })}
+                                    {inspectionFee > 0 &&
+                                      row("Inspection Fee", inspectionFee, { prefix: "+" })}
+                                    {materialCost > 0 &&
+                                      row("Installation Materials Cost", materialCost, {
+                                        prefix: "+",
+                                      })}
+                                  </>
+                                )}
+                                <Divider />
+                                {row("Total Amount", totalAmount, { emphasize: true })}
+                                {vatAmount > 0 &&
+                                  row(`VAT (${vatPct}% of Total Amount)`, vatAmount, {
+                                    prefix: "+",
+                                  })}
+                                {insuranceFee > 0 &&
+                                  row(
+                                    `Insurance Fee (${insurancePct}% of Sub-Total)`,
+                                    insuranceFee,
+                                    { prefix: "+" }
+                                  )}
+                                <Divider />
+                                <div className="flex justify-between items-center py-3">
+                                  <span className="font-bold text-base uppercase text-[#273E8E] tracking-wide">
+                                    Grand Total
+                                  </span>
+                                  <span className="font-bold text-xl text-[#273E8E] tabular-nums">
+                                    {amt(grandTotal)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </>
