@@ -1302,11 +1302,11 @@ const BNPLBuyNow: React.FC = () => {
     } else if (activeTab === "Audit Requests") {
       if (statusForm.status === "approved") {
         if (!statusForm.approval_payment_date?.trim()) {
-          alert("Please enter the audit payment date.");
+          alert("Please select the audit date.");
           return;
         }
         if (!statusForm.approval_payment_time?.trim()) {
-          alert("Please enter the audit payment time.");
+          alert("Please select the audit time.");
           return;
         }
         const amount = Number(statusForm.approval_payment_amount);
@@ -1448,6 +1448,19 @@ const BNPLBuyNow: React.FC = () => {
     const hour12 = hour % 12 || 12;
     return `${hour12}:${m || "00"} ${suffix}`;
   };
+
+  const auditVisitTimeOptions = [
+    { value: "08:00", label: "8:00 AM" },
+    { value: "09:00", label: "9:00 AM" },
+    { value: "10:00", label: "10:00 AM" },
+    { value: "11:00", label: "11:00 AM" },
+    { value: "12:00", label: "12:00 PM" },
+    { value: "13:00", label: "1:00 PM" },
+    { value: "14:00", label: "2:00 PM" },
+    { value: "15:00", label: "3:00 PM" },
+    { value: "16:00", label: "4:00 PM" },
+    { value: "17:00", label: "5:00 PM" },
+  ];
 
   const formatAuditPreferredSchedule = (item: {
     preferred_audit_date?: string | null;
@@ -5177,12 +5190,15 @@ const BNPLBuyNow: React.FC = () => {
                         selectedItem.approval_payment_account_details)) && (
                       <div className="bg-emerald-50 rounded-lg border border-emerald-200 p-6">
                         <h3 className="text-lg font-semibold text-emerald-900 mb-4">
-                          Audit payment instructions (sent to customer)
+                          Audit visit details and payment instructions
                         </h3>
+                        <p className="text-sm text-emerald-800 mb-4">
+                          These are the details sent to the customer when the audit request is approved.
+                        </p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {selectedItem.approval_payment_date && (
                             <div>
-                              <p className="text-xs text-emerald-700 mb-1">Payment date</p>
+                              <p className="text-xs text-emerald-700 mb-1">Audit date</p>
                               <p className="text-sm font-medium text-gray-900">
                                 {formatDate(selectedItem.approval_payment_date)}
                               </p>
@@ -5190,7 +5206,7 @@ const BNPLBuyNow: React.FC = () => {
                           )}
                           {selectedItem.approval_payment_time && (
                             <div>
-                              <p className="text-xs text-emerald-700 mb-1">Payment time</p>
+                              <p className="text-xs text-emerald-700 mb-1">Audit time</p>
                               <p className="text-sm font-medium text-gray-900">
                                 {formatAuditPreferredTime(selectedItem.approval_payment_time)}
                               </p>
@@ -5923,7 +5939,7 @@ const BNPLBuyNow: React.FC = () => {
                 </select>
                 {activeTab === "Audit Requests" && (
                   <p className="mt-2 text-xs text-gray-600">
-                    Approved sends a confirmation email with payment date, time, amount, and account details. Rejected sends an update email.
+                    Approved sends the audit visit date/time plus payment instructions to the customer. Rejected sends an update email.
                   </p>
                 )}
               </div>
@@ -5931,15 +5947,15 @@ const BNPLBuyNow: React.FC = () => {
               {activeTab === "Audit Requests" && statusForm.status === "approved" && (
                 <div className="rounded-xl border border-[#273E8E]/20 bg-[#F5F7FF] p-4 space-y-3">
                   <p className="text-sm font-semibold text-[#273E8E]">
-                    Audit payment details (sent to customer by email)
+                    Audit visit details and payment instructions
                   </p>
                   <p className="text-xs text-gray-600">
-                    The customer must pay for the audit. These fields are included in the approval email.
+                    Tell the customer when the team will come for the audit. Payment account details below tell them how to pay before the visit.
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Payment date *
+                        Audit date *
                       </label>
                       <input
                         type="date"
@@ -5952,16 +5968,22 @@ const BNPLBuyNow: React.FC = () => {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Payment time *
+                        Audit time *
                       </label>
-                      <input
-                        type="time"
+                      <select
                         className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
                         value={statusForm.approval_payment_time}
                         onChange={(e) =>
                           setStatusForm({ ...statusForm, approval_payment_time: e.target.value })
                         }
-                      />
+                      >
+                        <option value="">Select time</option>
+                        {auditVisitTimeOptions.map((slot) => (
+                          <option key={slot.value} value={slot.value}>
+                            {slot.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                   <div>
@@ -5987,7 +6009,7 @@ const BNPLBuyNow: React.FC = () => {
                     <textarea
                       className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
                       rows={3}
-                      placeholder="Bank name, account name, account number, etc."
+                      placeholder="Bank name, account name, account number, and payment instructions."
                       value={statusForm.approval_payment_account_details}
                       onChange={(e) =>
                         setStatusForm({
