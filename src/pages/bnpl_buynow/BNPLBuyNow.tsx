@@ -4972,6 +4972,14 @@ const BNPLBuyNow: React.FC = () => {
                             </p>
                           </div>
                         )}
+                        {selectedItem.audit_type === "home-office" && selectedItem.audit_subtype && (
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Audit for</p>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {selectedItem.audit_subtype === "office" ? "Office" : "Home"}
+                            </p>
+                          </div>
+                        )}
                         {selectedItem.customer_type && (
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Customer Type</p>
