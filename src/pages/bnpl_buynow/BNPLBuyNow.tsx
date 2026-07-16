@@ -1551,13 +1551,6 @@ const BNPLBuyNow: React.FC = () => {
   const filterOrderListRowsForInstaller = (rows: any[], item: any, summary?: any) => {
     if (!Array.isArray(rows) || rows.length === 0) return [];
     const installer = resolveOrderInstallerChoice(item, summary);
-    const materialCost = Number(
-      item?.material_cost ??
-        summary?.material_cost ??
-        item?.invoice?.material_cost ??
-        summary?.invoice?.material_cost ??
-        0
-    );
     return rows.filter((row: any) => {
       const label = String(row?.name || row?.description || row?.title || "")
         .toLowerCase()
@@ -1568,8 +1561,12 @@ const BNPLBuyNow: React.FC = () => {
         label === "installation materials cost";
       if (!isMaterialLine) return true;
       if (installer === "own") return false;
-      if (materialCost <= 0) return false;
-      return true;
+      const lineAmount = Math.max(
+        Number(row?.rate ?? 0),
+        Number(row?.price ?? 0),
+        Number(row?.total_cost ?? 0)
+      );
+      return lineAmount > 0;
     });
   };
 
