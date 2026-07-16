@@ -150,6 +150,19 @@ function bnplDash(v: string | null | undefined): string {
   return String(v).trim();
 }
 
+/** Human labels for Buy Now / BNPL solution category (Step 2). */
+function labelProductCategory(value: unknown): string {
+  const v = String(value || "").toLowerCase().trim();
+  if (!v) return "";
+  if (v === "full-kit") return "Solar panels, inverter, and battery solution";
+  if (v === "inverter-battery") return "Inverter and battery solution";
+  if (v === "battery-only") return "Battery only";
+  if (v === "inverter-only") return "Inverter only";
+  if (v === "panels-only") return "Solar panels only";
+  if (v === "audit") return "Professional energy audit";
+  return String(value).replace(/-/g, " ");
+}
+
 /**
  * Gated estate: Yes only if they chose “in a gated estate”; otherwise N/A (not gated or unknown).
  * API often sends 0/1 instead of booleans.
@@ -3158,6 +3171,19 @@ const BNPLBuyNow: React.FC = () => {
                             </p>
                           </div>
                         )}
+                        {(activeTab === "Buy Now Orders" || activeTab === "BNPL Orders") &&
+                          (selectedItem.product_category ||
+                            selectedItem.loan_application?.product_category) && (
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Solution</p>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {labelProductCategory(
+                                selectedItem.product_category ||
+                                  selectedItem.loan_application?.product_category
+                              )}
+                            </p>
+                          </div>
+                        )}
                         {activeTab === "Buy Now Orders" &&
                           resolveOrderInstallerChoice(selectedItem, orderSummary) && (
                           <div>
@@ -3166,14 +3192,6 @@ const BNPLBuyNow: React.FC = () => {
                               {resolveOrderInstallerChoice(selectedItem, orderSummary) === "own"
                                 ? "Use my own installer"
                                 : "TrooSolar installer"}
-                            </p>
-                          </div>
-                        )}
-                        {activeTab === "BNPL Orders" && selectedItem.loan_application?.product_category && (
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Product Category</p>
-                            <p className="text-sm font-semibold text-gray-900 capitalize">
-                              {String(selectedItem.loan_application.product_category).replace(/-/g, " ")}
                             </p>
                           </div>
                         )}
@@ -3833,6 +3851,14 @@ const BNPLBuyNow: React.FC = () => {
                             <p className="text-xs text-gray-500 mb-1">Repayment Duration</p>
                             <p className="text-sm font-semibold text-gray-900">
                               {selectedItem.repayment_duration} months
+                            </p>
+                          </div>
+                        )}
+                        {selectedItem.product_category && (
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Solution</p>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {labelProductCategory(selectedItem.product_category)}
                             </p>
                           </div>
                         )}
@@ -5031,6 +5057,14 @@ const BNPLBuyNow: React.FC = () => {
                             </p>
                           </div>
                         )}
+                        {selectedItem.product_category && (
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Solution</p>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {labelProductCategory(selectedItem.product_category)}
+                            </p>
+                          </div>
+                        )}
                         {selectedItem.created_at && (
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Request Date</p>
@@ -5329,7 +5363,7 @@ const BNPLBuyNow: React.FC = () => {
                         {Object.entries(selectedItem).map(([key, value]: [string, any]) => {
                           // Skip already displayed fields
                           const skipKeys = [
-                            "id", "status", "audit_type", "audit_subtype", "customer_type", "user", "property_address",
+                            "id", "status", "audit_type", "audit_subtype", "customer_type", "product_category", "user", "property_address",
                             "property_state", "property_landmark", "building_type", "facility_description",
                             "property_floors", "property_rooms", "company_name", "is_gated_estate",
                             "contact_name", "contact_phone", "has_property_details", "order_id", "created_at", "updated_at",
@@ -5465,6 +5499,20 @@ const BNPLBuyNow: React.FC = () => {
                             <span className="text-gray-600">Customer type:</span>
                             <span className="ml-2 font-medium text-gray-900">
                               {resolveOrderCustomerType(selectedItem, orderSummary)}
+                            </span>
+                          </div>
+                        )}
+                        {(orderSummary.product_category ||
+                          selectedItem.product_category ||
+                          selectedItem.loan_application?.product_category) && (
+                          <div className="col-span-2">
+                            <span className="text-gray-600">Solution:</span>
+                            <span className="ml-2 font-medium text-gray-900">
+                              {labelProductCategory(
+                                orderSummary.product_category ||
+                                  selectedItem.product_category ||
+                                  selectedItem.loan_application?.product_category
+                              )}
                             </span>
                           </div>
                         )}
