@@ -3171,19 +3171,6 @@ const BNPLBuyNow: React.FC = () => {
                             </p>
                           </div>
                         )}
-                        {(activeTab === "Buy Now Orders" || activeTab === "BNPL Orders") &&
-                          (selectedItem.product_category ||
-                            selectedItem.loan_application?.product_category) && (
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Solution</p>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {labelProductCategory(
-                                selectedItem.product_category ||
-                                  selectedItem.loan_application?.product_category
-                              )}
-                            </p>
-                          </div>
-                        )}
                         {activeTab === "Buy Now Orders" &&
                           resolveOrderInstallerChoice(selectedItem, orderSummary) && (
                           <div>
@@ -3192,6 +3179,14 @@ const BNPLBuyNow: React.FC = () => {
                               {resolveOrderInstallerChoice(selectedItem, orderSummary) === "own"
                                 ? "Use my own installer"
                                 : "TrooSolar installer"}
+                            </p>
+                          </div>
+                        )}
+                        {activeTab === "BNPL Orders" && selectedItem.loan_application?.product_category && (
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Product Category</p>
+                            <p className="text-sm font-semibold text-gray-900 capitalize">
+                              {String(selectedItem.loan_application.product_category).replace(/-/g, " ")}
                             </p>
                           </div>
                         )}
@@ -3851,14 +3846,6 @@ const BNPLBuyNow: React.FC = () => {
                             <p className="text-xs text-gray-500 mb-1">Repayment Duration</p>
                             <p className="text-sm font-semibold text-gray-900">
                               {selectedItem.repayment_duration} months
-                            </p>
-                          </div>
-                        )}
-                        {selectedItem.product_category && (
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Solution</p>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {labelProductCategory(selectedItem.product_category)}
                             </p>
                           </div>
                         )}
@@ -5499,20 +5486,6 @@ const BNPLBuyNow: React.FC = () => {
                             <span className="text-gray-600">Customer type:</span>
                             <span className="ml-2 font-medium text-gray-900">
                               {resolveOrderCustomerType(selectedItem, orderSummary)}
-                            </span>
-                          </div>
-                        )}
-                        {(orderSummary.product_category ||
-                          selectedItem.product_category ||
-                          selectedItem.loan_application?.product_category) && (
-                          <div className="col-span-2">
-                            <span className="text-gray-600">Solution:</span>
-                            <span className="ml-2 font-medium text-gray-900">
-                              {labelProductCategory(
-                                orderSummary.product_category ||
-                                  selectedItem.product_category ||
-                                  selectedItem.loan_application?.product_category
-                              )}
                             </span>
                           </div>
                         )}
