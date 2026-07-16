@@ -450,6 +450,9 @@ const BNPLBuyNow: React.FC = () => {
     approval_payment_time: "",
     approval_payment_amount: "",
     approval_payment_account_details: "",
+    customer_has_paid: false,
+    customer_payment_date: "",
+    customer_payment_time: "",
     counter_offer_min_deposit: "",
     counter_offer_min_tenor: "",
     property_state: "",
@@ -465,6 +468,9 @@ const BNPLBuyNow: React.FC = () => {
     approval_payment_time: "",
     approval_payment_amount: "",
     approval_payment_account_details: "",
+    customer_has_paid: false,
+    customer_payment_date: "",
+    customer_payment_time: "",
     counter_offer_min_deposit: "",
     counter_offer_min_tenor: "",
     property_state: "",
@@ -1213,6 +1219,9 @@ const BNPLBuyNow: React.FC = () => {
           ? String(item.approval_payment_amount)
           : "",
       approval_payment_account_details: item.approval_payment_account_details || "",
+      customer_has_paid: !!item.customer_has_paid,
+      customer_payment_date: item.customer_payment_date || "",
+      customer_payment_time: item.customer_payment_time || "",
       counter_offer_min_deposit: depositPercentStr,
       counter_offer_min_tenor: item?.counter_offer_min_tenor ?? "",
       property_state: item?.property_state || "",
@@ -1320,6 +1329,17 @@ const BNPLBuyNow: React.FC = () => {
         }
       }
 
+      if (statusForm.customer_has_paid) {
+        if (!statusForm.customer_payment_date?.trim()) {
+          alert("Please select the payment date.");
+          return;
+        }
+        if (!statusForm.customer_payment_time?.trim()) {
+          alert("Please select the payment time.");
+          return;
+        }
+      }
+
       updateAuditRequestStatusMutation.mutate({
         id: selectedItem.id,
         status: statusForm.status,
@@ -1336,6 +1356,13 @@ const BNPLBuyNow: React.FC = () => {
           statusForm.status === "approved"
             ? statusForm.approval_payment_account_details
             : undefined,
+        customer_has_paid: !!statusForm.customer_has_paid,
+        customer_payment_date: statusForm.customer_has_paid
+          ? statusForm.customer_payment_date
+          : undefined,
+        customer_payment_time: statusForm.customer_has_paid
+          ? statusForm.customer_payment_time
+          : undefined,
         property_state: statusForm.property_state || undefined,
         property_address: statusForm.property_address || undefined,
         contact_name: statusForm.contact_name || undefined,
@@ -2853,12 +2880,22 @@ const BNPLBuyNow: React.FC = () => {
                                 )}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <span
-                                  className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-full"
-                                  style={getStatusColor(item.status)}
-                                >
-                                  {item.status}
-                                </span>
+                                <div className="flex flex-col gap-1 items-start">
+                                  <span
+                                    className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-full"
+                                    style={getStatusColor(item.status)}
+                                  >
+                                    {item.status}
+                                  </span>
+                                  {item.customer_has_paid && (
+                                    <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded-full bg-emerald-100 text-emerald-800">
+                                      Paid
+                                      {item.customer_payment_date
+                                        ? ` · ${formatDate(item.customer_payment_date)}`
+                                        : ""}
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                 {formatDate(item.created_at)}
@@ -5240,6 +5277,45 @@ const BNPLBuyNow: React.FC = () => {
                       </div>
                     )}
 
+                    {selectedItem.status === "approved" && (
+                      <div className="bg-white rounded-lg border border-gray-200 p-6">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                          Customer payment received
+                        </h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                          Recorded after approval when the customer pays for the audit.
+                        </p>
+                        {selectedItem.customer_has_paid ? (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Payment status</p>
+                              <p className="text-sm font-medium text-emerald-700">Paid</p>
+                            </div>
+                            {selectedItem.customer_payment_date && (
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">Payment date</p>
+                                <p className="text-sm font-medium text-gray-900">
+                                  {formatDate(selectedItem.customer_payment_date)}
+                                </p>
+                              </div>
+                            )}
+                            {selectedItem.customer_payment_time && (
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">Payment time</p>
+                                <p className="text-sm font-medium text-gray-900">
+                                  {formatAuditPreferredTime(selectedItem.customer_payment_time)}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-amber-700">
+                            Not marked as paid yet. Use Update to record payment date and time.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     {/* Additional Information */}
                     <div className="bg-white rounded-lg border border-gray-200 p-6">
                       <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Information</h3>
@@ -5253,7 +5329,8 @@ const BNPLBuyNow: React.FC = () => {
                             "contact_name", "contact_phone", "has_property_details", "order_id", "created_at", "updated_at",
                             "preferred_audit_date", "preferred_audit_time", "source",
                             "approval_payment_date", "approval_payment_time", "approval_payment_amount",
-                            "approval_payment_account_details", "admin_notes", "approved_at", "approved_by"
+                            "approval_payment_account_details", "admin_notes", "approved_at", "approved_by",
+                            "customer_has_paid", "customer_payment_date", "customer_payment_time",
                           ];
                           if (skipKeys.includes(key)) return null;
                           if (bnplSkipAdditionalInfoScalar(key, value)) return null;
@@ -5945,9 +6022,9 @@ const BNPLBuyNow: React.FC = () => {
                     </>
                   )}
                 </select>
-                {activeTab === "Audit Requests" && (
+                  {activeTab === "Audit Requests" && (
                   <p className="mt-2 text-xs text-gray-600">
-                    Approved sends the audit visit date/time plus payment instructions to the customer. Rejected sends an update email.
+                    Approved sends the audit visit date/time plus payment instructions to the customer. After approval, use the payment received section to record when the customer paid. Rejected sends an update email.
                   </p>
                 )}
               </div>
@@ -6027,6 +6104,76 @@ const BNPLBuyNow: React.FC = () => {
                       }
                     />
                   </div>
+                </div>
+              )}
+
+              {activeTab === "Audit Requests" && statusForm.status === "approved" && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-3">
+                  <p className="text-sm font-semibold text-emerald-900">
+                    Customer payment received
+                  </p>
+                  <p className="text-xs text-emerald-800">
+                    After the customer pays, mark it here with the payment date and time.
+                  </p>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 text-[#273E8E] rounded border-gray-300"
+                      checked={!!statusForm.customer_has_paid}
+                      onChange={(e) =>
+                        setStatusForm({
+                          ...statusForm,
+                          customer_has_paid: e.target.checked,
+                          ...(e.target.checked
+                            ? {}
+                            : { customer_payment_date: "", customer_payment_time: "" }),
+                        })
+                      }
+                    />
+                    <span className="text-sm text-gray-800">Customer has paid</span>
+                  </label>
+                  {statusForm.customer_has_paid && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Payment date *
+                        </label>
+                        <input
+                          type="date"
+                          className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                          value={statusForm.customer_payment_date}
+                          onChange={(e) =>
+                            setStatusForm({
+                              ...statusForm,
+                              customer_payment_date: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Payment time *
+                        </label>
+                        <select
+                          className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                          value={statusForm.customer_payment_time}
+                          onChange={(e) =>
+                            setStatusForm({
+                              ...statusForm,
+                              customer_payment_time: e.target.value,
+                            })
+                          }
+                        >
+                          <option value="">Select time</option>
+                          {auditVisitTimeOptions.map((slot) => (
+                            <option key={slot.value} value={slot.value}>
+                              {slot.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

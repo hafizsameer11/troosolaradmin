@@ -296,6 +296,9 @@ export const updateAuditRequestStatus = async (
     approval_payment_time?: string;
     approval_payment_amount?: number;
     approval_payment_account_details?: string;
+    customer_has_paid?: boolean;
+    customer_payment_date?: string;
+    customer_payment_time?: string;
     property_state?: string;
     property_address?: string;
     contact_name?: string;
