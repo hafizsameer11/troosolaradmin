@@ -35,6 +35,7 @@ import {
   clearUserCart,
   resendCartEmail,
   updateAuditRequestStatus,
+  uploadAuditPaymentReceipt,
   uploadBNPLGuarantorForm,
   setBNPLApplicationGuarantor,
   acceptBNPLInstallationDate,
@@ -65,6 +66,21 @@ function siteBannerSlotPreview(slot?: { url?: string | null; path?: string | nul
     return `${base}/${String(path).replace(/^\//, "")}`;
   }
   return url ? String(url) : null;
+}
+
+function auditPaymentReceiptUrl(item: {
+  customer_payment_receipt_url?: string | null;
+  customer_payment_receipt_path?: string | null;
+} | null | undefined): string | null {
+  if (!item) return null;
+  if (item.customer_payment_receipt_url && /^https?:\/\//i.test(String(item.customer_payment_receipt_url))) {
+    return String(item.customer_payment_receipt_url);
+  }
+  if (item.customer_payment_receipt_path) {
+    const base = DOCUMENT_BASE_URL.replace(/\/$/, "");
+    return `${base}/${String(item.customer_payment_receipt_path).replace(/^\//, "")}`;
+  }
+  return null;
 }
 
 /** Estate name/address from loan_application row, with fallbacks (snapshot / audit_request on order). */
@@ -456,6 +472,7 @@ const BNPLBuyNow: React.FC = () => {
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [loadingInvoice, setLoadingInvoice] = useState(false);
   const [invoiceNotFound, setInvoiceNotFound] = useState(false);
+  const [auditPaymentReceiptFile, setAuditPaymentReceiptFile] = useState<File | null>(null);
   const [statusForm, setStatusForm] = useState({
     status: "",
     admin_notes: "",
@@ -956,8 +973,9 @@ const BNPLBuyNow: React.FC = () => {
       property_address?: string;
       contact_name?: string;
       contact_phone?: string;
+      payment_receipt?: File | null;
     }) => {
-      return await updateAuditRequestStatus(payload.id, {
+      const statusResult = await updateAuditRequestStatus(payload.id, {
         status: payload.status as "approved" | "rejected" | "completed",
         admin_notes: payload.admin_notes,
         approval_payment_date: payload.approval_payment_date,
@@ -972,11 +990,18 @@ const BNPLBuyNow: React.FC = () => {
         contact_name: payload.contact_name,
         contact_phone: payload.contact_phone,
       }, token);
+
+      if (payload.payment_receipt && payload.customer_has_paid) {
+        await uploadAuditPaymentReceipt(payload.id, payload.payment_receipt, token);
+      }
+
+      return statusResult;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["audit-requests"] });
       setShowStatusModal(false);
       setStatusForm(emptyStatusForm());
+      setAuditPaymentReceiptFile(null);
       alert("Audit request status updated successfully!");
     },
     onError: (error: any) => {
@@ -1249,6 +1274,7 @@ const BNPLBuyNow: React.FC = () => {
       contact_phone: item?.contact_phone || item?.user?.phone || "",
     });
     setShowStatusModal(true);
+    setAuditPaymentReceiptFile(null);
   };
 
   const handleStatusSubmit = () => {
@@ -1386,6 +1412,7 @@ const BNPLBuyNow: React.FC = () => {
         property_address: statusForm.property_address || undefined,
         contact_name: statusForm.contact_name || undefined,
         contact_phone: statusForm.contact_phone || undefined,
+        payment_receipt: statusForm.customer_has_paid ? auditPaymentReceiptFile : null,
       });
     }
   };
@@ -5334,6 +5361,19 @@ const BNPLBuyNow: React.FC = () => {
                                 </p>
                               </div>
                             )}
+                            {auditPaymentReceiptUrl(selectedItem) && (
+                              <div className="md:col-span-2">
+                                <p className="text-xs text-gray-500 mb-1">Payment receipt</p>
+                                <a
+                                  href={auditPaymentReceiptUrl(selectedItem) || "#"}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-sm font-medium text-[#273E8E] hover:underline"
+                                >
+                                  View payment receipt
+                                </a>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <p className="text-sm text-amber-700">
@@ -5358,6 +5398,7 @@ const BNPLBuyNow: React.FC = () => {
                             "approval_payment_date", "approval_payment_time", "approval_payment_amount",
                             "approval_payment_account_details", "admin_notes", "approved_at", "approved_by",
                             "customer_has_paid", "customer_payment_date", "customer_payment_time",
+                            "customer_payment_receipt_path", "customer_payment_receipt_url",
                           ];
                           if (skipKeys.includes(key)) return null;
                           if (bnplSkipAdditionalInfoScalar(key, value)) return null;
@@ -5986,6 +6027,7 @@ const BNPLBuyNow: React.FC = () => {
                   setShowStatusModal(false);
                   setSelectedItem(null);
                   setStatusForm(emptyStatusForm());
+                  setAuditPaymentReceiptFile(null);
                 }}
                 className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100 transition-colors"
               >
@@ -6140,7 +6182,7 @@ const BNPLBuyNow: React.FC = () => {
                     Customer payment received
                   </p>
                   <p className="text-xs text-emerald-800">
-                    After the customer pays, mark it here with the payment date and time.
+                    After the customer pays, mark it here with the payment date and time, and upload the payment receipt.
                   </p>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -6160,44 +6202,77 @@ const BNPLBuyNow: React.FC = () => {
                     <span className="text-sm text-gray-800">Customer has paid</span>
                   </label>
                   {statusForm.customer_has_paid && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Payment date *
-                        </label>
-                        <input
-                          type="date"
-                          className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
-                          value={statusForm.customer_payment_date}
-                          onChange={(e) =>
-                            setStatusForm({
-                              ...statusForm,
-                              customer_payment_date: e.target.value,
-                            })
-                          }
-                        />
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Payment date *
+                          </label>
+                          <input
+                            type="date"
+                            className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                            value={statusForm.customer_payment_date}
+                            onChange={(e) =>
+                              setStatusForm({
+                                ...statusForm,
+                                customer_payment_date: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Payment time *
+                          </label>
+                          <select
+                            className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                            value={statusForm.customer_payment_time}
+                            onChange={(e) =>
+                              setStatusForm({
+                                ...statusForm,
+                                customer_payment_time: e.target.value,
+                              })
+                            }
+                          >
+                            <option value="">Select time</option>
+                            {auditVisitTimeOptions.map((slot) => (
+                              <option key={slot.value} value={slot.value}>
+                                {slot.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Payment time *
+                          Payment receipt (PDF or image)
                         </label>
-                        <select
-                          className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
-                          value={statusForm.customer_payment_time}
+                        <input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                          className="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-[#273E8E] file:text-white file:text-sm file:font-medium"
                           onChange={(e) =>
-                            setStatusForm({
-                              ...statusForm,
-                              customer_payment_time: e.target.value,
-                            })
+                            setAuditPaymentReceiptFile(e.target.files?.[0] || null)
                           }
-                        >
-                          <option value="">Select time</option>
-                          {auditVisitTimeOptions.map((slot) => (
-                            <option key={slot.value} value={slot.value}>
-                              {slot.label}
-                            </option>
-                          ))}
-                        </select>
+                        />
+                        {auditPaymentReceiptFile && (
+                          <p className="mt-1 text-xs text-gray-600">
+                            Selected: {auditPaymentReceiptFile.name}
+                          </p>
+                        )}
+                        {!auditPaymentReceiptFile && auditPaymentReceiptUrl(selectedItem) && (
+                          <p className="mt-1 text-xs text-gray-600">
+                            Current receipt:{" "}
+                            <a
+                              href={auditPaymentReceiptUrl(selectedItem) || "#"}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[#273E8E] hover:underline"
+                            >
+                              View uploaded receipt
+                            </a>
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}

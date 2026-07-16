@@ -268,6 +268,8 @@ const API_ENDPOINTS = {
       `${API_DOMAIN}/admin/audit/requests/${id}`, // GET
     AuditRequestUpdateStatus: (id: number | string) =>
       `${API_DOMAIN}/admin/audit/requests/${id}/status`, // PUT
+    AuditRequestPaymentReceipt: (id: number | string) =>
+      `${API_DOMAIN}/admin/audit/requests/${id}/payment-receipt`, // POST
     AuditUsersWithRequests: API_DOMAIN + "/admin/audit/users-with-requests", // GET
 
     // --- Custom Order Admin Endpoints ---

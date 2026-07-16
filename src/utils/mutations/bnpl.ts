@@ -314,6 +314,26 @@ export const updateAuditRequestStatus = async (
   );
 };
 
+// POST /api/admin/audit/requests/{id}/payment-receipt
+export const uploadAuditPaymentReceipt = async (
+  id: number | string,
+  file: File,
+  token: string
+): Promise<{ status: string; data?: any; message: string }> => {
+  const formData = new FormData();
+  formData.append("payment_receipt", file);
+  const res = await axios.post(
+    API_ENDPOINTS.ADMIN.AuditRequestPaymentReceipt(id),
+    formData,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+  return res.data;
+};
+
 export const setMonoUserBvn = async (
   userId: number | string,
   payload: { bvn: string },
