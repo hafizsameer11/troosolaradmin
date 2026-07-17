@@ -299,6 +299,7 @@ export const updateAuditRequestStatus = async (
     customer_has_paid?: boolean;
     customer_payment_date?: string;
     customer_payment_time?: string;
+    force_payment_confirmation_email?: boolean;
     property_state?: string;
     property_address?: string;
     contact_name?: string;

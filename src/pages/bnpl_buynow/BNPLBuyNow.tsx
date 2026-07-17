@@ -974,13 +974,26 @@ const BNPLBuyNow: React.FC = () => {
       contact_name?: string;
       contact_phone?: string;
       payment_receipt?: File | null;
+      force_payment_confirmation_email?: boolean;
     }) => {
+      let uploadEmailSent = false;
+      let uploadEmailError: string | null = null;
+
       // Upload receipt first so the confirmation email can send with receipt on file.
       if (payload.payment_receipt && payload.customer_has_paid) {
-        await uploadAuditPaymentReceipt(payload.id, payload.payment_receipt, token);
+        const uploadResult = await uploadAuditPaymentReceipt(
+          payload.id,
+          payload.payment_receipt,
+          token
+        );
+        uploadEmailSent = !!uploadResult?.data?.payment_confirmation_email_sent;
+        uploadEmailError = uploadResult?.data?.payment_confirmation_email_error || null;
+        if (uploadResult?.status === "error") {
+          throw new Error(uploadResult?.message || "Failed to upload payment receipt");
+        }
       }
 
-      return await updateAuditRequestStatus(payload.id, {
+      const statusResult = await updateAuditRequestStatus(payload.id, {
         status: payload.status as "approved" | "rejected" | "completed",
         admin_notes: payload.admin_notes,
         approval_payment_date: payload.approval_payment_date,
@@ -990,18 +1003,40 @@ const BNPLBuyNow: React.FC = () => {
         customer_has_paid: payload.customer_has_paid,
         customer_payment_date: payload.customer_payment_date,
         customer_payment_time: payload.customer_payment_time,
+        force_payment_confirmation_email: payload.force_payment_confirmation_email,
         property_state: payload.property_state,
         property_address: payload.property_address,
         contact_name: payload.contact_name,
         contact_phone: payload.contact_phone,
       }, token);
+
+      return {
+        statusResult,
+        uploadEmailSent,
+        uploadEmailError,
+      };
     },
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ["audit-requests"] });
       setShowStatusModal(false);
       setStatusForm(emptyStatusForm());
       setAuditPaymentReceiptFile(null);
-      alert("Audit request status updated successfully!");
+
+      const statusData = result?.statusResult?.data ?? result?.statusResult ?? {};
+      const emailSent =
+        !!result?.uploadEmailSent || !!statusData?.payment_confirmation_email_sent;
+      const emailError =
+        result?.uploadEmailError || statusData?.payment_confirmation_email_error || null;
+
+      if (emailSent) {
+        alert("Audit request updated. Payment confirmation email sent to the customer.");
+      } else if (emailError) {
+        alert(
+          `Audit request updated, but payment confirmation email failed:\n${emailError}\n\nCheck server mail logs / MAIL_* settings.`
+        );
+      } else {
+        alert("Audit request status updated successfully!");
+      }
     },
     onError: (error: any) => {
       alert(error?.message || "Failed to update audit request status");
@@ -1389,6 +1424,9 @@ const BNPLBuyNow: React.FC = () => {
         }
       }
 
+      const hasExistingReceipt = !!auditPaymentReceiptUrl(selectedItem);
+      const uploadingNewReceipt = !!(statusForm.customer_has_paid && auditPaymentReceiptFile);
+
       updateAuditRequestStatusMutation.mutate({
         id: selectedItem.id,
         status: statusForm.status,
@@ -1412,6 +1450,9 @@ const BNPLBuyNow: React.FC = () => {
         customer_payment_time: statusForm.customer_has_paid
           ? statusForm.customer_payment_time
           : undefined,
+        // Resend confirmation when using an existing receipt (no new file upload this time).
+        force_payment_confirmation_email:
+          !!statusForm.customer_has_paid && hasExistingReceipt && !uploadingNewReceipt,
         property_state: statusForm.property_state || undefined,
         property_address: statusForm.property_address || undefined,
         contact_name: statusForm.contact_name || undefined,
