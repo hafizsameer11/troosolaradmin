@@ -975,7 +975,12 @@ const BNPLBuyNow: React.FC = () => {
       contact_phone?: string;
       payment_receipt?: File | null;
     }) => {
-      const statusResult = await updateAuditRequestStatus(payload.id, {
+      // Upload receipt first so the confirmation email can send with receipt on file.
+      if (payload.payment_receipt && payload.customer_has_paid) {
+        await uploadAuditPaymentReceipt(payload.id, payload.payment_receipt, token);
+      }
+
+      return await updateAuditRequestStatus(payload.id, {
         status: payload.status as "approved" | "rejected" | "completed",
         admin_notes: payload.admin_notes,
         approval_payment_date: payload.approval_payment_date,
@@ -990,12 +995,6 @@ const BNPLBuyNow: React.FC = () => {
         contact_name: payload.contact_name,
         contact_phone: payload.contact_phone,
       }, token);
-
-      if (payload.payment_receipt && payload.customer_has_paid) {
-        await uploadAuditPaymentReceipt(payload.id, payload.payment_receipt, token);
-      }
-
-      return statusResult;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["audit-requests"] });
@@ -1381,6 +1380,11 @@ const BNPLBuyNow: React.FC = () => {
         }
         if (!statusForm.customer_payment_time?.trim()) {
           alert("Please select the payment time.");
+          return;
+        }
+        const hasExistingReceipt = !!auditPaymentReceiptUrl(selectedItem);
+        if (!auditPaymentReceiptFile && !hasExistingReceipt) {
+          alert("Please upload the payment receipt. The customer confirmation email is sent when the receipt is uploaded.");
           return;
         }
       }
@@ -6245,7 +6249,7 @@ const BNPLBuyNow: React.FC = () => {
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Payment receipt (PDF or image)
+                          Payment receipt (PDF or image) *
                         </label>
                         <input
                           type="file"
@@ -6255,6 +6259,9 @@ const BNPLBuyNow: React.FC = () => {
                             setAuditPaymentReceiptFile(e.target.files?.[0] || null)
                           }
                         />
+                        <p className="mt-1 text-xs text-emerald-800">
+                          Uploading the receipt sends the payment confirmation email to the customer.
+                        </p>
                         {auditPaymentReceiptFile && (
                           <p className="mt-1 text-xs text-gray-600">
                             Selected: {auditPaymentReceiptFile.name}
