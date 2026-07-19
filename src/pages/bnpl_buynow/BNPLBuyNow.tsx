@@ -556,6 +556,7 @@ const BNPLBuyNow: React.FC = () => {
   });
   const [selectedProducts, setSelectedProducts] = useState<any[]>([]);
   const [productTypeFilter, setProductTypeFilter] = useState<"all" | "products" | "bundles">("all");
+  const [createOrderCatalogSearch, setCreateOrderCatalogSearch] = useState("");
   const [customProducts, setCustomProducts] = useState<Array<{
     name: string;
     description: string;
@@ -881,6 +882,7 @@ const BNPLBuyNow: React.FC = () => {
       setSelectedProducts([]);
       setCustomProducts([]);
       setShowAddCustomProduct(false);
+      setCreateOrderCatalogSearch("");
       setNewCustomProduct({
         name: "",
         description: "",
@@ -6642,6 +6644,7 @@ const BNPLBuyNow: React.FC = () => {
                   setSelectedProducts([]);
                   setCustomProducts([]);
                   setShowAddCustomProduct(false);
+                  setCreateOrderCatalogSearch("");
                   setNewCustomProduct({
                     name: "",
                     description: "",
@@ -6959,12 +6962,41 @@ const BNPLBuyNow: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Select Products/Bundles
                 </label>
+                <div className="mb-3">
+                  <input
+                    type="search"
+                    value={createOrderCatalogSearch}
+                    onChange={(e) => setCreateOrderCatalogSearch(e.target.value)}
+                    placeholder="Search products or bundles by name..."
+                    className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-[#273E8E] focus:border-transparent outline-none"
+                  />
+                </div>
                 {cartProductsLoading ? (
                   <LoadingSpinner message="Loading products..." />
                 ) : (
+                  (() => {
+                    const search = createOrderCatalogSearch.trim().toLowerCase();
+                    const matchesSearch = (item: any) => {
+                      if (!search) return true;
+                      const title = String(item?.title || item?.name || "").toLowerCase();
+                      const model = String(item?.product_model || item?.model || "").toLowerCase();
+                      return title.includes(search) || model.includes(search);
+                    };
+                    const products = (cartProductsData?.data?.products || []).filter(matchesSearch);
+                    const bundles = (cartProductsData?.data?.bundles || []).filter(matchesSearch);
+                    const hasResults = products.length > 0 || bundles.length > 0;
+
+                    return (
                   <div className="border border-gray-200 rounded-lg p-4 max-h-64 overflow-y-auto">
                     <div className="space-y-2">
-                      {cartProductsData?.data?.products?.map((product: any) => (
+                      {!hasResults && (
+                        <p className="text-sm text-gray-500 py-4 text-center">
+                          {search
+                            ? `No products or bundles match “${createOrderCatalogSearch.trim()}”.`
+                            : "No products or bundles available."}
+                        </p>
+                      )}
+                      {products.map((product: any) => (
                         <div
                           key={`product-${product.id}`}
                           className="flex items-center justify-between p-2 border rounded hover:bg-gray-50"
@@ -7037,7 +7069,7 @@ const BNPLBuyNow: React.FC = () => {
                           </div>
                         </div>
                       ))}
-                      {cartProductsData?.data?.bundles?.map((bundle: any) => (
+                      {bundles.map((bundle: any) => (
                         <div
                           key={`bundle-${bundle.id}`}
                           className="flex items-center justify-between p-2 border rounded hover:bg-gray-50"
@@ -7112,6 +7144,8 @@ const BNPLBuyNow: React.FC = () => {
                       ))}
                     </div>
                   </div>
+                    );
+                  })()
                 )}
               </div>
 
@@ -7220,6 +7254,7 @@ const BNPLBuyNow: React.FC = () => {
                     setSelectedProducts([]);
                     setCustomProducts([]);
                     setShowAddCustomProduct(false);
+                    setCreateOrderCatalogSearch("");
                     setNewCustomProduct({
                       name: "",
                       description: "",
