@@ -22,6 +22,7 @@ import {
   getCustomOrder,
   getAuditRequests,
   getAuditRequest,
+  getUserAuditHistory,
   getBNPLSettings,
   getSiteBanner,
 } from "../../utils/queries/bnpl";
@@ -552,11 +553,15 @@ const BNPLBuyNow: React.FC = () => {
   const [detailResendOrderType, setDetailResendOrderType] = useState<"buy_now" | "bnpl">("buy_now");
   const [createOrderForm, setCreateOrderForm] = useState({
     user_id: "",
+    audit_request_id: "",
     order_type: "buy_now" as "buy_now" | "bnpl",
     items: [] as Array<{ type: "product" | "bundle"; id: number; quantity: number }>,
     send_email: true,
     email_message: "",
   });
+  const [showAuditHistoryModal, setShowAuditHistoryModal] = useState(false);
+  const [auditHistoryUserId, setAuditHistoryUserId] = useState<number | null>(null);
+  const [auditHistoryUser, setAuditHistoryUser] = useState<any>(null);
   const [selectedProducts, setSelectedProducts] = useState<any[]>([]);
   const [productTypeFilter, setProductTypeFilter] = useState<"all" | "products" | "bundles">("all");
   const [createOrderCatalogSearch, setCreateOrderCatalogSearch] = useState("");
@@ -727,6 +732,51 @@ const BNPLBuyNow: React.FC = () => {
   });
   const customOrderDetail = getApiData(customOrderDetailResponse) ?? null;
 
+  const {
+    data: createOrderAuditsResponse,
+    isLoading: createOrderAuditsLoading,
+  } = useQuery({
+    queryKey: ["user-audit-history", "create-order", createOrderForm.user_id],
+    queryFn: () => getUserAuditHistory(createOrderForm.user_id, token),
+    enabled: showCreateOrderModal && !!createOrderForm.user_id && !!token,
+  });
+  const createOrderAudits =
+    getApiData(createOrderAuditsResponse)?.requests ??
+    createOrderAuditsResponse?.data?.requests ??
+    [];
+
+  useEffect(() => {
+    if (!createOrderForm.user_id) {
+      if (createOrderForm.audit_request_id) {
+        setCreateOrderForm((prev) => ({ ...prev, audit_request_id: "" }));
+      }
+      return;
+    }
+    if (!Array.isArray(createOrderAudits) || createOrderAudits.length === 0) {
+      return;
+    }
+    const stillValid = createOrderAudits.some(
+      (a: any) => String(a.id) === String(createOrderForm.audit_request_id)
+    );
+    if (!stillValid) {
+      // Default to latest (API returns newest first)
+      setCreateOrderForm((prev) => ({
+        ...prev,
+        audit_request_id: String(createOrderAudits[0].id),
+      }));
+    }
+  }, [createOrderForm.user_id, createOrderAudits]);
+
+  const {
+    data: auditHistoryResponse,
+    isLoading: auditHistoryLoading,
+  } = useQuery({
+    queryKey: ["user-audit-history", "modal", auditHistoryUserId],
+    queryFn: () => getUserAuditHistory(auditHistoryUserId!, token),
+    enabled: showAuditHistoryModal && !!auditHistoryUserId && !!token,
+  });
+  const auditHistoryPayload = getApiData(auditHistoryResponse) ?? auditHistoryResponse?.data ?? null;
+
   // Financing partners (for Send to Partner in BNPL)
   const { data: financePartnersData, isLoading: financePartnersLoading } = useQuery({
     queryKey: ["all-finance-partners"],
@@ -889,6 +939,7 @@ const BNPLBuyNow: React.FC = () => {
       setShowCreateOrderModal(false);
       setCreateOrderForm({
         user_id: "",
+        audit_request_id: "",
         order_type: "buy_now",
         items: [],
         send_email: true,
@@ -2488,14 +2539,14 @@ const BNPLBuyNow: React.FC = () => {
                         <th className="px-6 py-4 text-left text-sm font-medium text-black">Type</th>
                         <th className="px-6 py-4 text-left text-sm font-medium text-black">Items</th>
                         <th className="px-6 py-4 text-left text-sm font-medium text-black">Amount</th>
-                        <th className="px-6 py-4 text-left text-sm font-medium text-black">Latest Audit</th>
+                        <th className="px-6 py-4 text-left text-sm font-medium text-black">Linked Audit</th>
                         <th className="px-6 py-4 text-left text-sm font-medium text-black">Sent</th>
                         <th className="px-6 py-4 text-left text-sm font-medium text-black">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white">
                       {(customOrdersData?.data?.data || []).map((order: any, index: number) => {
-                        const audit = order.latest_audit_request;
+                        const audit = order.audit_request || order.latest_audit_request;
                         return (
                           <tr
                             key={order.id}
@@ -2538,6 +2589,7 @@ const BNPLBuyNow: React.FC = () => {
                               {audit ? (
                                 <div className="flex flex-col gap-1">
                                   <span className="text-gray-800">
+                                    #{audit.id}{" "}
                                     {audit.audit_subtype === "office"
                                       ? "Office"
                                       : audit.audit_subtype === "home"
@@ -2557,9 +2609,14 @@ const BNPLBuyNow: React.FC = () => {
                                   >
                                     {audit.status}
                                   </span>
+                                  {audit.created_at && (
+                                    <span className="text-[11px] text-gray-500">
+                                      {formatDate(audit.created_at)}
+                                    </span>
+                                  )}
                                 </div>
                               ) : (
-                                <span className="text-gray-400">None</span>
+                                <span className="text-gray-400">Not linked</span>
                               )}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
@@ -2979,6 +3036,26 @@ const BNPLBuyNow: React.FC = () => {
                                   >
                                     Update
                                   </button>
+                                  {(item.user?.id || item.user_id) && (
+                                    <button
+                                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-full text-sm font-medium transition-colors cursor-pointer"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const uid = Number(item.user?.id ?? item.user_id);
+                                        setAuditHistoryUserId(uid);
+                                        setAuditHistoryUser(
+                                          item.user || {
+                                            id: uid,
+                                            name: displayUserFullName(item.user),
+                                            email: item.user?.email,
+                                          }
+                                        );
+                                        setShowAuditHistoryModal(true);
+                                      }}
+                                    >
+                                      History
+                                    </button>
+                                  )}
                                 </div>
                               </td>
                             </>
@@ -6608,6 +6685,7 @@ const BNPLBuyNow: React.FC = () => {
                   setShowCreateOrderModal(false);
                   setCreateOrderForm({
                     user_id: "",
+                    audit_request_id: "",
                     order_type: "buy_now",
                     items: [],
                     send_email: true,
@@ -6639,7 +6717,11 @@ const BNPLBuyNow: React.FC = () => {
                 <UserSearchSelect
                   value={createOrderForm.user_id}
                   onChange={(userId) =>
-                    setCreateOrderForm({ ...createOrderForm, user_id: userId })
+                    setCreateOrderForm({
+                      ...createOrderForm,
+                      user_id: userId,
+                      audit_request_id: "",
+                    })
                   }
                   users={customOrderUsers}
                   loading={allUsersLoading}
@@ -6651,6 +6733,56 @@ const BNPLBuyNow: React.FC = () => {
                   }
                 />
               </div>
+
+              {createOrderForm.user_id && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Audit Request *
+                  </label>
+                  {createOrderAuditsLoading ? (
+                    <p className="text-sm text-gray-500">Loading this customer&apos;s audits…</p>
+                  ) : createOrderAudits.length === 0 ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                      This customer has no audit requests yet. Create or wait for an audit before sending a custom order.
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-2">
+                      {createOrderAudits.map((audit: any) => {
+                        const selected =
+                          String(createOrderForm.audit_request_id) === String(audit.id);
+                        return (
+                          <button
+                            key={audit.id}
+                            type="button"
+                            onClick={() =>
+                              setCreateOrderForm({
+                                ...createOrderForm,
+                                audit_request_id: String(audit.id),
+                              })
+                            }
+                            className={`w-full text-left rounded-lg border px-3 py-2 transition-colors ${
+                              selected
+                                ? "border-[#273E8E] bg-[#273E8E]/10"
+                                : "border-gray-200 hover:border-gray-300 bg-white"
+                            }`}
+                          >
+                            <div className="text-sm font-medium text-gray-900">
+                              {audit.heading ||
+                                `#${audit.id} · ${audit.audit_subtype || audit.audit_type || "Audit"}`}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              {audit.property_address
+                                ? audit.property_address
+                                : "No property address"}
+                              {audit.property_state ? ` · ${audit.property_state}` : ""}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Order Type */}
               <div>
@@ -7218,6 +7350,7 @@ const BNPLBuyNow: React.FC = () => {
                     setShowCreateOrderModal(false);
                     setCreateOrderForm({
                       user_id: "",
+                      audit_request_id: "",
                       order_type: "buy_now",
                       items: [],
                       send_email: true,
@@ -7244,6 +7377,10 @@ const BNPLBuyNow: React.FC = () => {
                       alert("Please select a user");
                       return;
                     }
+                    if (!createOrderForm.audit_request_id) {
+                      alert("Please select an audit request for this customer");
+                      return;
+                    }
                     if (selectedProducts.length === 0 && customProducts.length === 0) {
                       alert("Please select at least one product, bundle, or add a custom product/service");
                       return;
@@ -7254,6 +7391,7 @@ const BNPLBuyNow: React.FC = () => {
                     createCustomOrderMutation.mutate({
                       ...createOrderForm,
                       user_id: parseInt(createOrderForm.user_id),
+                      audit_request_id: parseInt(createOrderForm.audit_request_id),
                       items: selectedProducts,
                       custom_items: customProducts.map((custom) => ({
                         name: custom.name,
@@ -7350,9 +7488,9 @@ const BNPLBuyNow: React.FC = () => {
 
                 {customOrderDetail.latest_audit_request && (
                   <div className="bg-blue-50 rounded-lg p-4 mb-6">
-                    <h3 className="font-semibold text-gray-900 mb-3">Latest Audit Request</h3>
+                    <h3 className="font-semibold text-gray-900 mb-3">Linked Audit Request</h3>
                     {(() => {
-                      const request = customOrderDetail.latest_audit_request;
+                      const request = customOrderDetail.audit_request || customOrderDetail.latest_audit_request;
                       return (
                         <div className="bg-white rounded p-3 border border-gray-200 text-xs">
                           <div className="flex justify-between items-start mb-2">
@@ -7720,6 +7858,142 @@ const BNPLBuyNow: React.FC = () => {
             ) : (
               <div className="text-center py-8 text-gray-500">
                 Failed to load cart
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Customer audit history modal */}
+      {showAuditHistoryModal && auditHistoryUserId && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto shadow-xl">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Audit History</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {(auditHistoryPayload?.user?.name ||
+                    auditHistoryUser?.name ||
+                    displayUserFullName(auditHistoryUser) ||
+                    "Customer")}
+                  {auditHistoryPayload?.user?.email || auditHistoryUser?.email
+                    ? ` · ${auditHistoryPayload?.user?.email || auditHistoryUser?.email}`
+                    : ""}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowAuditHistoryModal(false);
+                  setAuditHistoryUserId(null);
+                  setAuditHistoryUser(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <img src={images.cross} className="w-6 h-6" alt="Close" />
+              </button>
+            </div>
+
+            {auditHistoryLoading ? (
+              <LoadingSpinner message="Loading audit history..." />
+            ) : (auditHistoryPayload?.requests?.length || 0) === 0 ? (
+              <div className="rounded-xl border border-dashed border-gray-200 p-10 text-center text-gray-500">
+                No audit requests for this customer yet.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  {auditHistoryPayload.total} request
+                  {auditHistoryPayload.total === 1 ? "" : "s"} · newest first
+                </p>
+                {auditHistoryPayload.requests.map((audit: any) => (
+                  <div
+                    key={audit.id}
+                    className="rounded-xl border border-gray-200 bg-gradient-to-br from-slate-50 to-white p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+                      <div>
+                        <h3 className="font-semibold text-gray-900">
+                          {audit.heading || `#${audit.id}`}
+                        </h3>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {audit.type_label || audit.audit_type}
+                          {audit.customer_type ? ` · ${audit.customer_type}` : ""}
+                          {audit.product_category ? ` · ${audit.product_category}` : ""}
+                        </p>
+                      </div>
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                          audit.status === "approved"
+                            ? "bg-green-100 text-green-800"
+                            : audit.status === "pending"
+                              ? "bg-orange-100 text-orange-800"
+                              : audit.status === "rejected"
+                                ? "bg-red-100 text-red-800"
+                                : "bg-blue-100 text-blue-800"
+                        }`}
+                      >
+                        {audit.status}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-700">
+                      <div>
+                        <span className="text-gray-500">Address: </span>
+                        {audit.property_address || "—"}
+                      </div>
+                      <div>
+                        <span className="text-gray-500">State: </span>
+                        {audit.property_state || "—"}
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Schedule: </span>
+                        {formatAuditPreferredSchedule(audit) || "—"}
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Created: </span>
+                        {audit.created_at ? formatDate(audit.created_at) : "—"}
+                      </div>
+                      {audit.property_floors != null && (
+                        <div>
+                          <span className="text-gray-500">Floors: </span>
+                          {audit.property_floors}
+                        </div>
+                      )}
+                      {audit.property_rooms != null && (
+                        <div>
+                          <span className="text-gray-500">
+                            {audit.audit_subtype === "office" ? "Office spaces: " : "Rooms: "}
+                          </span>
+                          {audit.property_rooms}
+                        </div>
+                      )}
+                      {audit.is_gated_estate != null && (
+                        <div>
+                          <span className="text-gray-500">Gated estate: </span>
+                          {audit.is_gated_estate ? "Yes" : "No"}
+                        </div>
+                      )}
+                      {audit.contact_name && (
+                        <div>
+                          <span className="text-gray-500">Contact: </span>
+                          {audit.contact_name}
+                          {audit.contact_phone ? ` · ${audit.contact_phone}` : ""}
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="text-sm text-[#273E8E] font-medium hover:underline"
+                        onClick={() => {
+                          setShowAuditHistoryModal(false);
+                          handleViewDetails(audit);
+                        }}
+                      >
+                        Open full details
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

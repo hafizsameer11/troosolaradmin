@@ -217,6 +217,7 @@ export const updateBuyNowOrderStatus = async (
 export const createCustomOrder = async (
   payload: {
     user_id: number;
+    audit_request_id: number;
     order_type: "buy_now" | "bnpl";
     items: Array<{
       type: "product" | "bundle";

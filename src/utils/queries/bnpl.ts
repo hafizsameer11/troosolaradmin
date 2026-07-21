@@ -331,6 +331,19 @@ export const getUsersWithAuditRequests = async (
   return await apiCall(url, "GET", undefined, token);
 };
 
+// GET /api/admin/audit/users/{userId}/requests
+export const getUserAuditHistory = async (
+  userId: number | string,
+  token: string
+): Promise<any> => {
+  return await apiCall(
+    API_ENDPOINTS.ADMIN.AuditUserHistory(userId),
+    "GET",
+    undefined,
+    token
+  );
+};
+
 const appendQuery = (base: string, params?: Record<string, string | number | boolean | undefined>) => {
   if (!params) return base;
   const queryParams = new URLSearchParams();

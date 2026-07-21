@@ -271,6 +271,8 @@ const API_ENDPOINTS = {
     AuditRequestPaymentReceipt: (id: number | string) =>
       `${API_DOMAIN}/admin/audit/requests/${id}/payment-receipt`, // POST
     AuditUsersWithRequests: API_DOMAIN + "/admin/audit/users-with-requests", // GET
+    AuditUserHistory: (userId: number | string) =>
+      `${API_DOMAIN}/admin/audit/users/${userId}/requests`, // GET
 
     // --- Custom Order Admin Endpoints ---
     CreateCustomOrder: API_DOMAIN + "/admin/cart/create-custom-order", // POST
