@@ -286,6 +286,23 @@ export const resendCartEmail = async (
   );
 };
 
+// POST /api/admin/cart/custom-orders/{id}/resend
+export const resendCustomOrderEmail = async (
+  id: number | string,
+  payload: {
+    order_type?: "buy_now" | "bnpl";
+    email_message?: string;
+  },
+  token: string
+): Promise<any> => {
+  return await apiCall(
+    API_ENDPOINTS.ADMIN.CustomOrderResend(id),
+    "POST",
+    payload,
+    token
+  );
+};
+
 // PUT /api/admin/audit/requests/{id}/status
 export const updateAuditRequestStatus = async (
   id: number | string,

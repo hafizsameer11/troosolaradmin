@@ -274,6 +274,11 @@ const API_ENDPOINTS = {
 
     // --- Custom Order Admin Endpoints ---
     CreateCustomOrder: API_DOMAIN + "/admin/cart/create-custom-order", // POST
+    CustomOrdersList: API_DOMAIN + "/admin/cart/custom-orders", // GET
+    CustomOrderShow: (id: number | string) =>
+      `${API_DOMAIN}/admin/cart/custom-orders/${id}`, // GET
+    CustomOrderResend: (id: number | string) =>
+      `${API_DOMAIN}/admin/cart/custom-orders/${id}/resend`, // POST
     GetCartProducts: API_DOMAIN + "/admin/cart/products", // GET
     GetUserCart: (userId: number | string) =>
       `${API_DOMAIN}/admin/cart/user/${userId}`, // GET

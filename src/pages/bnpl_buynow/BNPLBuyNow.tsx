@@ -18,9 +18,10 @@ import {
   getOrderInvoiceDetails,
   getCartProducts,
   getUserCart,
+  getCustomOrders,
+  getCustomOrder,
   getAuditRequests,
   getAuditRequest,
-  getUsersWithAuditRequests,
   getBNPLSettings,
   getSiteBanner,
 } from "../../utils/queries/bnpl";
@@ -34,6 +35,7 @@ import {
   removeCartItem,
   clearUserCart,
   resendCartEmail,
+  resendCustomOrderEmail,
   updateAuditRequestStatus,
   uploadAuditPaymentReceipt,
   uploadBNPLGuarantorForm,
@@ -458,7 +460,7 @@ const BNPL_TAB_FROM_PARAM: Record<string, string> = {
 const BNPLBuyNow: React.FC = () => {
   const [activeTab, setActiveTab] = useState("BNPL Applications");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [customOrdersUserFilter, setCustomOrdersUserFilter] = useState("All");
+  const [customOrdersTypeFilter, setCustomOrdersTypeFilter] = useState("All");
   const [auditTypeFilter, setAuditTypeFilter] = useState("All Types"); // For Audit Requests
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -546,6 +548,7 @@ const BNPLBuyNow: React.FC = () => {
   const [showUserDetailModal, setShowUserDetailModal] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [selectedCustomOrderId, setSelectedCustomOrderId] = useState<number | null>(null);
   const [detailResendOrderType, setDetailResendOrderType] = useState<"buy_now" | "bnpl">("buy_now");
   const [createOrderForm, setCreateOrderForm] = useState({
     user_id: "",
@@ -694,23 +697,35 @@ const BNPLBuyNow: React.FC = () => {
     enabled: activeTab === "Audit Requests" && !!token,
   });
 
-  // Users with Audit Requests Query (for Custom Orders)
+  // Individual custom-order links (one row per email / send)
   const {
-    data: auditUsersData,
-    isLoading: auditUsersLoading,
+    data: customOrdersData,
+    isLoading: customOrdersLoading,
   } = useQuery({
-    queryKey: ["audit-users-with-requests", searchQuery, auditTypeFilter, customOrdersUserFilter, currentPage],
-    queryFn: () => getUsersWithAuditRequests(token, {
+    queryKey: ["custom-orders", searchQuery, customOrdersTypeFilter, currentPage],
+    queryFn: () => getCustomOrders(token, {
       search: searchQuery || undefined,
-      audit_type: auditTypeFilter !== "All Types" ? auditTypeFilter.toLowerCase().replace(" ", "-") : undefined,
-      has_pending: customOrdersUserFilter === "Has Pending" ? true : undefined,
-      sort_by: "last_audit_request_date",
-      sort_order: "desc",
+      order_type:
+        customOrdersTypeFilter === "Buy Now"
+          ? "buy_now"
+          : customOrdersTypeFilter === "BNPL"
+            ? "bnpl"
+            : undefined,
       per_page: itemsPerPage,
       page: currentPage,
     }),
     enabled: activeTab === "Custom Orders" && !!token,
   });
+
+  const {
+    data: customOrderDetailResponse,
+    isLoading: customOrderDetailLoading,
+  } = useQuery({
+    queryKey: ["custom-order-detail", selectedCustomOrderId],
+    queryFn: () => getCustomOrder(selectedCustomOrderId!, token),
+    enabled: showUserDetailModal && !!selectedCustomOrderId && !!token,
+  });
+  const customOrderDetail = getApiData(customOrderDetailResponse) ?? null;
 
   // Financing partners (for Send to Partner in BNPL)
   const { data: financePartnersData, isLoading: financePartnersLoading } = useQuery({
@@ -802,7 +817,7 @@ const BNPLBuyNow: React.FC = () => {
     }));
   }, [allUsersData]);
 
-  // User Cart Query
+  // User Cart Query (legacy cart modal only)
   const {
     data: userCartResponse,
     isLoading: userCartLoading,
@@ -810,7 +825,7 @@ const BNPLBuyNow: React.FC = () => {
   } = useQuery({
     queryKey: ["user-cart", selectedUserId],
     queryFn: () => getUserCart(selectedUserId!, token),
-    enabled: activeTab === "Custom Orders" && !!selectedUserId && !!token,
+    enabled: showUserCartModal && !!selectedUserId && !!token,
   });
 
 
@@ -890,11 +905,12 @@ const BNPLBuyNow: React.FC = () => {
         quantity: "1",
       });
 
-      queryClient.invalidateQueries({ queryKey: ["audit-users-with-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["custom-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["custom-order-detail"] });
 
       if (result.email_sent === false) {
         alert(
-          `Custom order was saved to the user's cart, but the email could not be sent${emailError ? `:\n${emailError}` : ""}.\n\nUse "Resend Cart Link" in View Details, or share this link manually:\n${cartLink}`
+          `Custom order was saved, but the email could not be sent${emailError ? `:\n${emailError}` : ""}.\n\nUse "Resend Link" in View Details, or share this link manually:\n${cartLink}`
         );
       } else if (emailSent && userEmail) {
         alert(`Custom order created successfully. Email sent to ${userEmail}.`);
@@ -914,8 +930,7 @@ const BNPLBuyNow: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-cart"] });
       refetchUserCart();
-      // Invalidate audit users query to refresh the list
-      queryClient.invalidateQueries({ queryKey: ["audit-users-with-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["custom-orders"] });
       alert("Item removed from cart successfully");
     },
   });
@@ -927,8 +942,7 @@ const BNPLBuyNow: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-cart"] });
       refetchUserCart();
-      // Invalidate audit users query to refresh the list
-      queryClient.invalidateQueries({ queryKey: ["audit-users-with-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["custom-orders"] });
       alert("Cart cleared successfully");
     },
   });
@@ -937,24 +951,32 @@ const BNPLBuyNow: React.FC = () => {
     mutationFn: async ({ userId, payload }: { userId: number; payload: any }) => {
       return await resendCartEmail(userId, payload, token);
     },
-    onSuccess: (response: any) => {
-      const result = getApiData(response) ?? {};
-      if (result.email_sent === false) {
-        alert(
-          `Failed to resend email${result.email_error ? `: ${result.email_error}` : ""}${
-            result.cart_link ? `\n\nShare this link manually:\n${result.cart_link}` : ""
-          }`
-        );
-        return;
-      }
-      alert(
-        `Cart link email sent to ${result.email || "the user"}.${
-          result.cart_link ? `\n\nLink:\n${result.cart_link}` : ""
-        }`
-      );
+    onSuccess: () => {
+      alert("Cart link email resent successfully");
+      queryClient.invalidateQueries({ queryKey: ["custom-orders"] });
     },
     onError: (error: any) => {
-      alert(error?.message || "Failed to resend cart link email");
+      alert(error?.message || "Failed to resend email");
+    },
+  });
+
+  const resendCustomOrderEmailMutation = useMutation({
+    mutationFn: async ({
+      id,
+      payload,
+    }: {
+      id: number;
+      payload?: { order_type?: "buy_now" | "bnpl"; email_message?: string };
+    }) => {
+      return await resendCustomOrderEmail(id, payload || {}, token);
+    },
+    onSuccess: () => {
+      alert("Custom order link email resent successfully");
+      queryClient.invalidateQueries({ queryKey: ["custom-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["custom-order-detail"] });
+    },
+    onError: (error: any) => {
+      alert(error?.message || "Failed to resend email");
     },
   });
 
@@ -1477,7 +1499,7 @@ const BNPLBuyNow: React.FC = () => {
       case "Audit Requests":
         return auditRequestsData?.data;
       case "Custom Orders":
-        return null;
+        return customOrdersData?.data;
       case "Guarantor Form":
         return null;
       case "Loan Settings":
@@ -1504,7 +1526,7 @@ const BNPLBuyNow: React.FC = () => {
       case "Audit Requests":
         return auditRequestsLoading;
       case "Custom Orders":
-        return auditUsersLoading;
+        return customOrdersLoading;
       case "Guarantor Form":
         return false;
       case "Loan Settings":
@@ -1834,25 +1856,20 @@ const BNPLBuyNow: React.FC = () => {
 
   const currentData = getCurrentData();
   // Support both paginated response (data.data, data.total) and direct array
-  const items =
-    activeTab === "Custom Orders"
-      ? []
-      : Array.isArray(currentData)
-        ? currentData
-        : (currentData?.data ?? []);
+  const items = Array.isArray(currentData)
+    ? currentData
+    : (currentData?.data ?? []);
   const total =
-    activeTab !== "Custom Orders"
-      ? (typeof (currentData as any)?.pagination?.total === "number"
-          ? (currentData as any).pagination.total
-          : typeof (currentData as any)?.total === "number"
-            ? (currentData as any).total
-            : items.length)
-      : (auditUsersData?.data?.pagination?.total || 0);
+    typeof (currentData as any)?.pagination?.total === "number"
+      ? (currentData as any).pagination.total
+      : typeof (currentData as any)?.total === "number"
+        ? (currentData as any).total
+        : items.length;
   const totalPages = Math.max(1, Math.ceil(total / itemsPerPage));
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, auditTypeFilter, customOrdersUserFilter, searchQuery, activeTab]);
+  }, [statusFilter, auditTypeFilter, customOrdersTypeFilter, searchQuery, activeTab]);
 
   return (
     <>
@@ -1984,7 +2001,7 @@ const BNPLBuyNow: React.FC = () => {
                 )}
               </select>
               )}
-              {(activeTab === "Audit Requests" || activeTab === "Custom Orders") && (
+              {(activeTab === "Audit Requests") && (
                 <select
                   className="border border-[#CDCDCD] rounded-lg px-4 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                   value={auditTypeFilter}
@@ -1998,11 +2015,12 @@ const BNPLBuyNow: React.FC = () => {
               {activeTab === "Custom Orders" && (
                 <select
                   className="border border-[#CDCDCD] rounded-lg px-4 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                  value={customOrdersUserFilter}
-                  onChange={(e) => setCustomOrdersUserFilter(e.target.value)}
+                  value={customOrdersTypeFilter}
+                  onChange={(e) => setCustomOrdersTypeFilter(e.target.value)}
                 >
-                  <option value="All">All Users</option>
-                  <option value="Has Pending">Has Pending Requests</option>
+                  <option value="All">All Types</option>
+                  <option value="Buy Now">Buy Now</option>
+                  <option value="BNPL">BNPL</option>
                 </select>
               )}
             </div>
@@ -2429,7 +2447,12 @@ const BNPLBuyNow: React.FC = () => {
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
             <div className="p-6 border-b border-gray-200">
               <div className="flex justify-between items-center">
-                <h2 className="text-xl font-bold text-gray-900">Custom Orders Management</h2>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Custom Orders</h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Each email send is listed separately — one Buy Now or BNPL custom order per row.
+                  </p>
+                </div>
                 <button
                   onClick={() => setShowCreateOrderModal(true)}
                   className="bg-[#273E8E] hover:bg-[#1e3270] text-white px-6 py-3 rounded-full text-sm font-medium transition-colors cursor-pointer"
@@ -2439,28 +2462,14 @@ const BNPLBuyNow: React.FC = () => {
               </div>
             </div>
 
-            {/* Users Table */}
-            {auditUsersLoading ? (
-              <LoadingSpinner message="Loading users with audit requests..." />
-            ) : auditUsersData?.data?.data?.length === 0 ? (
+            {customOrdersLoading ? (
+              <LoadingSpinner message="Loading custom orders..." />
+            ) : (customOrdersData?.data?.data?.length ?? 0) === 0 ? (
               <div className="p-12 text-center">
                 <div className="max-w-md mx-auto">
-                  <svg
-                    className="mx-auto h-12 w-12 text-gray-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                    />
-                  </svg>
-                  <h3 className="mt-4 text-lg font-medium text-gray-900">No users found</h3>
+                  <h3 className="mt-4 text-lg font-medium text-gray-900">No custom orders yet</h3>
                   <p className="mt-2 text-sm text-gray-500">
-                    There are no users with audit requests at the moment. Users who request audit services will appear here.
+                    Create a custom order and send it to a customer. Each send will appear here as its own request.
                   </p>
                 </div>
               </div>
@@ -2470,157 +2479,116 @@ const BNPLBuyNow: React.FC = () => {
                   <table className="w-full">
                     <thead className="bg-[#EBEBEB] border-b border-gray-200">
                       <tr>
-                        <th className="px-6 py-4 text-left text-sm font-medium text-black">
-                          Name
-                        </th>
-                        <th className="px-6 py-4 text-left text-sm font-medium text-black">
-                          Email
-                        </th>
-                        <th className="px-6 py-4 text-left text-sm font-medium text-black">
-                          Phone
-                        </th>
-                        <th className="px-6 py-4 text-left text-sm font-medium text-black">
-                          Audit Requests
-                        </th>
-                        <th className="px-6 py-4 text-left text-sm font-medium text-black">
-                          Status Summary
-                        </th>
-                        <th className="px-6 py-4 text-left text-sm font-medium text-black">
-                          Custom Order Cart
-                        </th>
-                        <th className="px-6 py-4 text-left text-sm font-medium text-black">
-                          Property Details
-                        </th>
-                        <th className="px-6 py-4 text-left text-sm font-medium text-black">
-                          Actions
-                        </th>
+                        <th className="px-6 py-4 text-left text-sm font-medium text-black">ID</th>
+                        <th className="px-6 py-4 text-left text-sm font-medium text-black">Customer</th>
+                        <th className="px-6 py-4 text-left text-sm font-medium text-black">Type</th>
+                        <th className="px-6 py-4 text-left text-sm font-medium text-black">Items</th>
+                        <th className="px-6 py-4 text-left text-sm font-medium text-black">Amount</th>
+                        <th className="px-6 py-4 text-left text-sm font-medium text-black">Latest Audit</th>
+                        <th className="px-6 py-4 text-left text-sm font-medium text-black">Sent</th>
+                        <th className="px-6 py-4 text-left text-sm font-medium text-black">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white">
-                      {(
-                        auditUsersData?.data?.data?.map((user: any, index: number) => {
-                          const needsPropertyDetails = user.audit_requests?.some(
-                            (req: any) =>
-                              req.needs_admin_input ??
-                              (req.audit_type === "commercial" && !req.has_property_details && req.status === "pending")
-                          );
-                          const hasPropertyDetails = user.audit_requests?.some(
-                            (req: any) => req.has_property_details
-                          );
-                          
-                          return (
-                            <tr
-                              key={user.id}
-                              className={`${
-                                index % 2 === 0 ? "bg-[#F8F8F8]" : "bg-white"
-                              } transition-colors border-b border-gray-100 last:border-b-0 hover:bg-gray-50 cursor-pointer`}
-                              onClick={async () => {
-                                setSelectedUser(user);
-                                setSelectedUserId(user.id);
-                                setShowUserDetailModal(true);
-                                // Refetch cart data for the selected user
-                                refetchUserCart();
-                              }}
-                            >
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                {user.name}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                {user.email}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                {user.phone}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                <div className="flex flex-col">
-                                  <span className="font-medium">{user.audit_request_count || 0} total</span>
-                                  {user.pending_count > 0 && (
-                                    <span className="text-xs text-orange-600">
-                                      {user.pending_count} pending
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      {(customOrdersData?.data?.data || []).map((order: any, index: number) => {
+                        const audit = order.latest_audit_request;
+                        return (
+                          <tr
+                            key={order.id}
+                            className={`${
+                              index % 2 === 0 ? "bg-[#F8F8F8]" : "bg-white"
+                            } transition-colors border-b border-gray-100 last:border-b-0 hover:bg-gray-50 cursor-pointer`}
+                            onClick={() => {
+                              setSelectedCustomOrderId(order.id);
+                              setSelectedUser(order.user);
+                              setSelectedUserId(order.user?.id ?? null);
+                              setDetailResendOrderType(order.order_type === "bnpl" ? "bnpl" : "buy_now");
+                              setShowUserDetailModal(true);
+                            }}
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              #{order.id}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              <div className="font-medium">{order.user?.name || "—"}</div>
+                              <div className="text-xs text-gray-500">{order.user?.email}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              <span
+                                className={`px-2 py-1 rounded text-xs font-medium ${
+                                  order.order_type === "bnpl"
+                                    ? "bg-purple-100 text-purple-800"
+                                    : "bg-blue-100 text-blue-800"
+                                }`}
+                              >
+                                {order.order_type === "bnpl" ? "BNPL" : "Buy Now"}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {order.item_count || 0} item{(order.item_count || 0) !== 1 ? "s" : ""}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {formatCurrency(order.total_amount || 0)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              {audit ? (
                                 <div className="flex flex-col gap-1">
-                                  {user.approved_count > 0 && (
-                                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                                      {user.approved_count} Approved
-                                    </span>
-                                  )}
-                                  {user.rejected_count > 0 && (
-                                    <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
-                                      {user.rejected_count} Rejected
-                                    </span>
-                                  )}
-                                  {user.completed_count > 0 && (
-                                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                                      {user.completed_count} Completed
-                                    </span>
-                                  )}
+                                  <span className="text-gray-800">
+                                    {audit.audit_subtype === "office"
+                                      ? "Office"
+                                      : audit.audit_subtype === "home"
+                                        ? "Home"
+                                        : audit.audit_type === "commercial"
+                                          ? "Commercial"
+                                          : "Home / Office"}
+                                  </span>
+                                  <span
+                                    className={`text-xs w-fit px-2 py-0.5 rounded ${
+                                      audit.status === "approved"
+                                        ? "bg-green-100 text-green-800"
+                                        : audit.status === "pending"
+                                          ? "bg-orange-100 text-orange-800"
+                                          : "bg-gray-100 text-gray-700"
+                                    }`}
+                                  >
+                                    {audit.status}
+                                  </span>
                                 </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                {user.cart_item_count > 0 ? (
-                                  <div className="flex flex-col gap-1">
-                                    <span className="font-medium text-gray-800">
-                                      {user.cart_item_count} item{user.cart_item_count !== 1 ? "s" : ""} · {formatCurrency(user.total_cart_amount || 0)}
-                                    </span>
-                                    {user.has_cart_access_token && (
-                                      <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded w-fit">
-                                        Link sent
-                                      </span>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <span className="text-gray-400">No cart items</span>
-                                )}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                {needsPropertyDetails ? (
-                                  <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded">
-                                    ⚠️ Needs Details
-                                  </span>
-                                ) : hasPropertyDetails ? (
-                                  <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">
-                                    ✓ Details Shared
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded">
-                                    No Details
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                <button
-                                  className="bg-[#273E8E] hover:bg-[#1e3270] text-white px-4 py-2 rounded-full text-sm font-medium transition-colors cursor-pointer"
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    setSelectedUser(user);
-                                    setSelectedUserId(user.id);
-                                    setShowUserDetailModal(true);
-                                    // Refetch cart data for the selected user
-                                    refetchUserCart();
-                                  }}
-                                >
-                                  View Details
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
+                              ) : (
+                                <span className="text-gray-400">None</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {order.created_at ? formatDate(order.created_at) : "—"}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                              <button
+                                className="bg-[#273E8E] hover:bg-[#1e3270] text-white px-4 py-2 rounded-full text-sm font-medium transition-colors cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedCustomOrderId(order.id);
+                                  setSelectedUser(order.user);
+                                  setSelectedUserId(order.user?.id ?? null);
+                                  setDetailResendOrderType(order.order_type === "bnpl" ? "bnpl" : "buy_now");
+                                  setShowUserDetailModal(true);
+                                }}
+                              >
+                                View Details
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
 
-                {/* Pagination */}
-                {auditUsersData?.data?.pagination && auditUsersData.data.pagination.last_page > 1 && (
+                {customOrdersData?.data?.pagination && customOrdersData.data.pagination.last_page > 1 && (
                   <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-white">
                     <div className="flex items-center text-sm text-gray-700">
                       <span>
-                        Showing {auditUsersData.data.pagination.from} to{" "}
-                        {auditUsersData.data.pagination.to} of {auditUsersData.data.pagination.total} results
+                        Showing {customOrdersData.data.pagination.from} to{" "}
+                        {customOrdersData.data.pagination.to} of {customOrdersData.data.pagination.total} results
                       </span>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -2637,12 +2605,12 @@ const BNPLBuyNow: React.FC = () => {
                       </button>
                       <div className="flex items-center space-x-1">
                         {Array.from(
-                          { length: auditUsersData.data.pagination.last_page },
+                          { length: customOrdersData.data.pagination.last_page },
                           (_, i) => i + 1
                         )
                           .slice(
                             Math.max(0, currentPage - 2),
-                            Math.min(auditUsersData.data.pagination.last_page, currentPage + 3)
+                            Math.min(customOrdersData.data.pagination.last_page, currentPage + 3)
                           )
                           .map((pageNumber) => (
                             <button
@@ -2661,12 +2629,12 @@ const BNPLBuyNow: React.FC = () => {
                       <button
                         onClick={() =>
                           setCurrentPage((prev) =>
-                            Math.min(prev + 1, auditUsersData.data.pagination.last_page)
+                            Math.min(prev + 1, customOrdersData.data.pagination.last_page)
                           )
                         }
-                        disabled={currentPage === auditUsersData.data.pagination.last_page}
+                        disabled={currentPage === customOrdersData.data.pagination.last_page}
                         className={`px-3 py-2 text-sm font-medium rounded-md border ${
-                          currentPage === auditUsersData.data.pagination.last_page
+                          currentPage === customOrdersData.data.pagination.last_page
                             ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
                             : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50 cursor-pointer"
                         }`}
@@ -7305,17 +7273,20 @@ const BNPLBuyNow: React.FC = () => {
         </div>
       )}
 
-      {/* User Detail Modal - Shows Custom Order Request Details */}
-      {showUserDetailModal && selectedUser && (
+      {/* Custom Order Detail Modal — one custom order + latest audit only */}
+      {showUserDetailModal && selectedCustomOrderId && (
         <div className="fixed inset-0 bg-black/40 bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-5xl mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gray-900">Custom Order Request Details</h2>
+              <h2 className="text-xl font-bold text-gray-900">
+                Custom Order Details #{selectedCustomOrderId}
+              </h2>
               <button
                 onClick={() => {
                   setShowUserDetailModal(false);
                   setSelectedUser(null);
                   setSelectedUserId(null);
+                  setSelectedCustomOrderId(null);
                 }}
                 className="text-gray-400 hover:text-gray-600"
               >
@@ -7323,74 +7294,63 @@ const BNPLBuyNow: React.FC = () => {
               </button>
             </div>
 
-            {userCartLoading ? (
-              <LoadingSpinner message="Loading request details..." />
+            {customOrderDetailLoading ? (
+              <LoadingSpinner message="Loading custom order..." />
+            ) : !customOrderDetail ? (
+              <p className="text-gray-500">Custom order not found.</p>
             ) : (
               <>
-                {/* User Information */}
                 <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                  <h3 className="font-semibold text-gray-900 mb-3">User Information</h3>
+                  <h3 className="font-semibold text-gray-900 mb-3">Customer</h3>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="text-gray-600">Name:</span>
                       <span className="ml-2 font-medium text-gray-900">
-                        {selectedUser.name || `${selectedUser.first_name} ${selectedUser.sur_name}`}
+                        {customOrderDetail.user?.name || selectedUser?.name || "—"}
                       </span>
                     </div>
                     <div>
                       <span className="text-gray-600">Email:</span>
-                      <span className="ml-2 font-medium text-gray-900">{selectedUser.email}</span>
+                      <span className="ml-2 font-medium text-gray-900">
+                        {customOrderDetail.user?.email || selectedUser?.email}
+                      </span>
                     </div>
                     <div>
                       <span className="text-gray-600">Phone:</span>
-                      <span className="ml-2 font-medium text-gray-900">{selectedUser.phone}</span>
+                      <span className="ml-2 font-medium text-gray-900">
+                        {customOrderDetail.user?.phone || selectedUser?.phone || "—"}
+                      </span>
                     </div>
                     <div>
                       <span className="text-gray-600">User ID:</span>
-                      <span className="ml-2 font-medium text-gray-900">{selectedUser.id}</span>
+                      <span className="ml-2 font-medium text-gray-900">
+                        {customOrderDetail.user?.id || selectedUser?.id}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Order type:</span>
+                      <span className="ml-2 font-medium text-gray-900">
+                        {customOrderDetail.order_type === "bnpl" ? "BNPL" : "Buy Now"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Sent:</span>
+                      <span className="ml-2 font-medium text-gray-900">
+                        {customOrderDetail.created_at
+                          ? formatDate(customOrderDetail.created_at)
+                          : "—"}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Audit Request Information */}
-                {selectedUser.audit_requests && selectedUser.audit_requests.length > 0 && (
+                {customOrderDetail.latest_audit_request && (
                   <div className="bg-blue-50 rounded-lg p-4 mb-6">
-                    <h3 className="font-semibold text-gray-900 mb-3">Audit Request Information</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm mb-3">
-                      <div>
-                        <span className="text-gray-600">Total Requests:</span>
-                        <span className="ml-2 font-medium text-gray-900">
-                          {selectedUser.audit_request_count || 0}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Pending:</span>
-                        <span className="ml-2 font-medium text-orange-600">
-                          {selectedUser.pending_count || 0}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Approved:</span>
-                        <span className="ml-2 font-medium text-green-600">
-                          {selectedUser.approved_count || 0}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Last Request:</span>
-                        <span className="ml-2 font-medium text-gray-900">
-                          {selectedUser.last_audit_request_date
-                            ? formatDate(selectedUser.last_audit_request_date)
-                            : "N/A"}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="mt-3 space-y-2">
-                      <h4 className="font-medium text-gray-700 text-sm">Audit Requests:</h4>
-                      {selectedUser.audit_requests.map((request: any) => (
-                        <div
-                          key={request.id}
-                          className="bg-white rounded p-3 border border-gray-200 text-xs"
-                        >
+                    <h3 className="font-semibold text-gray-900 mb-3">Latest Audit Request</h3>
+                    {(() => {
+                      const request = customOrderDetail.latest_audit_request;
+                      return (
+                        <div className="bg-white rounded p-3 border border-gray-200 text-xs">
                           <div className="flex justify-between items-start mb-2">
                             <div>
                               <span className="font-medium">
@@ -7468,170 +7428,104 @@ const BNPLBuyNow: React.FC = () => {
                             </div>
                           )}
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })()}
                   </div>
                 )}
 
-                {/* Cart/Request Details */}
-                {(() => {
-                  const cartPayload = getApiData(userCartResponse);
-                  return cartPayload ? (
-                  <div className="space-y-4">
-                    <h3 className="font-semibold text-gray-900 mb-3">Custom Order Cart</h3>
-                    
-                    {/* Cart Items */}
-                    {cartPayload.cart_items?.length > 0 ? (
-                      <>
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-gray-900 mb-3">Items in this custom order</h3>
+                  {(customOrderDetail.cart_items?.length || 0) > 0 ||
+                  (customOrderDetail.custom_items?.length || 0) > 0 ? (
+                    <>
+                      {(customOrderDetail.cart_items?.length || 0) > 0 && (
                         <div className="border rounded-lg overflow-hidden">
                           <table className="w-full">
                             <thead className="bg-gray-50">
                               <tr>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">
-                                  Item
-                                </th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">
-                                  Type
-                                </th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">
-                                  Quantity
-                                </th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">
-                                  Unit Price
-                                </th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">
-                                  Subtotal
-                                </th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">
-                                  Action
-                                </th>
+                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Item</th>
+                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Type</th>
+                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Quantity</th>
+                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Unit Price</th>
+                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Subtotal</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
-                              {cartPayload.cart_items.map((item: any) => (
+                              {customOrderDetail.cart_items.map((item: any) => (
                                 <tr key={item.id}>
                                   <td className="px-4 py-3 text-sm">
-                                    {item.itemable?.title || item.name || `Item ${item.id}`}
+                                    {item.itemable?.title || item.name || `Item ${item.itemable_id}`}
                                   </td>
                                   <td className="px-4 py-3 text-sm">
                                     <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
-                                      {item.itemable_type?.includes("Product") ? "Product" : "Bundle"}
+                                      {item.type === "bundle" ? "Bundle" : "Product"}
                                     </span>
                                   </td>
                                   <td className="px-4 py-3 text-sm">{item.quantity}</td>
-                                  <td className="px-4 py-3 text-sm">
-                                    {formatCurrency(item.unit_price)}
-                                  </td>
+                                  <td className="px-4 py-3 text-sm">{formatCurrency(item.unit_price)}</td>
                                   <td className="px-4 py-3 text-sm font-medium">
                                     {formatCurrency(item.subtotal)}
-                                  </td>
-                                  <td className="px-4 py-3">
-                                    <button
-                                      onClick={() => {
-                                        if (
-                                          confirm(
-                                            "Are you sure you want to remove this item?"
-                                          )
-                                        ) {
-                                          removeCartItemMutation.mutate({
-                                            userId: selectedUserId!,
-                                            itemId: item.id,
-                                          });
-                                        }
-                                      }}
-                                      className="text-red-600 hover:text-red-800 text-sm font-medium"
-                                    >
-                                      Remove
-                                    </button>
                                   </td>
                                 </tr>
                               ))}
                             </tbody>
                           </table>
                         </div>
+                      )}
 
-                        {/* Cart Total */}
-                        <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
-                          <span className="text-lg font-semibold">Total Amount:</span>
-                          <span className="text-lg font-bold text-[#273E8E]">
-                            {formatCurrency(cartPayload.total_amount || 0)}
-                          </span>
+                      {(customOrderDetail.custom_items?.length || 0) > 0 && (
+                        <div className="border rounded-lg p-4 bg-gray-50">
+                          <h4 className="text-sm font-medium text-gray-800 mb-2">Custom products / services</h4>
+                          <ul className="space-y-2 text-sm">
+                            {customOrderDetail.custom_items.map((row: any, idx: number) => (
+                              <li key={idx} className="flex justify-between gap-4">
+                                <span>
+                                  {row.name}
+                                  {row.description ? ` — ${row.description}` : ""}
+                                  {` × ${row.quantity || 1}`}
+                                </span>
+                                <span className="font-medium">
+                                  {formatCurrency((Number(row.price) || 0) * (Number(row.quantity) || 1))}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
                         </div>
+                      )}
 
-                        {selectedUser.has_cart_access_token && (
-                          <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                            Custom order link has been sent to this user.
-                          </p>
-                        )}
+                      <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
+                        <span className="text-lg font-semibold">Total Amount:</span>
+                        <span className="text-lg font-bold text-[#273E8E]">
+                          {formatCurrency(customOrderDetail.total_amount || 0)}
+                        </span>
+                      </div>
 
-                        <div className="flex flex-wrap items-center gap-3 text-sm">
-                          <span className="text-gray-600 font-medium">Resend link as:</span>
-                          <select
-                            value={detailResendOrderType}
-                            onChange={(e) =>
-                              setDetailResendOrderType(e.target.value as "buy_now" | "bnpl")
-                            }
-                            className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                          >
-                            <option value="buy_now">Buy Now (cart & checkout)</option>
-                            <option value="bnpl">BNPL (application flow)</option>
-                          </select>
-                        </div>
+                      {customOrderDetail.cart_link && (
+                        <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 break-all">
+                          Customer link: {customOrderDetail.cart_link}
+                        </p>
+                      )}
 
-                        {/* Actions */}
-                        <div className="flex space-x-3 pt-4 border-t">
-                          <button
-                            onClick={() => {
-                              setShowUserDetailModal(false);
-                              setCreateOrderForm({
-                                user_id: selectedUser.id.toString(),
-                                order_type: "buy_now",
-                                items: [],
-                                send_email: true,
-                                email_message: "",
-                              });
-                              setSelectedProducts([]);
-                              setShowCreateOrderModal(true);
-                            }}
-                            className="px-6 py-2 bg-[#273E8E] text-white rounded-lg text-sm font-medium hover:bg-[#1e3270]"
-                          >
-                            Add Items to Cart
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (
-                                confirm(
-                                  "Are you sure you want to clear the entire cart?"
-                                )
-                              ) {
-                                clearUserCartMutation.mutate(selectedUserId!);
-                              }
-                            }}
-                            className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600"
-                          >
-                            Clear Cart
-                          </button>
-                          <button
-                            onClick={() => {
-                              resendCartEmailMutation.mutate({
-                                userId: selectedUserId!,
-                                payload: { order_type: detailResendOrderType },
-                              });
-                            }}
-                            className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600"
-                          >
-                            Resend Cart Link
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="text-center py-8 text-gray-500 border border-gray-200 rounded-lg">
-                        <p className="mb-4">This user's cart is currently empty.</p>
+                      <div className="flex flex-wrap items-center gap-3 text-sm">
+                        <span className="text-gray-600 font-medium">Resend link as:</span>
+                        <select
+                          value={detailResendOrderType}
+                          onChange={(e) =>
+                            setDetailResendOrderType(e.target.value as "buy_now" | "bnpl")
+                          }
+                          className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                        >
+                          <option value="buy_now">Buy Now</option>
+                          <option value="bnpl">BNPL</option>
+                        </select>
+                      </div>
+
+                      <div className="flex space-x-3 pt-4 border-t">
                         <button
                           onClick={() => {
                             setShowUserDetailModal(false);
                             setCreateOrderForm({
-                              user_id: selectedUser.id.toString(),
+                              user_id: String(customOrderDetail.user?.id || selectedUserId || ""),
                               order_type: "buy_now",
                               items: [],
                               send_email: true,
@@ -7642,34 +7536,27 @@ const BNPLBuyNow: React.FC = () => {
                           }}
                           className="px-6 py-2 bg-[#273E8E] text-white rounded-lg text-sm font-medium hover:bg-[#1e3270]"
                         >
-                          Add Items to Cart
+                          Create Another Order
+                        </button>
+                        <button
+                          onClick={() => {
+                            resendCustomOrderEmailMutation.mutate({
+                              id: selectedCustomOrderId,
+                              payload: { order_type: detailResendOrderType },
+                            });
+                          }}
+                          className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600"
+                        >
+                          Resend Link
                         </button>
                       </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-gray-500 border border-gray-200 rounded-lg">
-                    <p className="mb-4">No cart data available for this user.</p>
-                    <button
-                      onClick={() => {
-                        setShowUserDetailModal(false);
-                        setCreateOrderForm({
-                          user_id: selectedUser.id.toString(),
-                          order_type: "buy_now",
-                          items: [],
-                          send_email: true,
-                          email_message: "",
-                        });
-                        setSelectedProducts([]);
-                        setShowCreateOrderModal(true);
-                      }}
-                      className="px-6 py-2 bg-[#273E8E] text-white rounded-lg text-sm font-medium hover:bg-[#1e3270]"
-                    >
-                      Add Items to Cart
-                    </button>
-                  </div>
-                );
-                })()}
+                    </>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500 border border-gray-200 rounded-lg">
+                      <p>This custom order has no catalog items (custom line items only, or empty).</p>
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>

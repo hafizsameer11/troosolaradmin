@@ -228,6 +228,42 @@ export const getUserCart = async (
   );
 };
 
+// GET /api/admin/cart/custom-orders
+export const getCustomOrders = async (
+  token: string,
+  params?: {
+    search?: string;
+    order_type?: string;
+    per_page?: number;
+    page?: number;
+  }
+): Promise<any> => {
+  let url = API_ENDPOINTS.ADMIN.CustomOrdersList;
+  if (params) {
+    const queryParams = new URLSearchParams();
+    if (params.search) queryParams.append("search", params.search);
+    if (params.order_type) queryParams.append("order_type", params.order_type);
+    if (params.per_page) queryParams.append("per_page", params.per_page.toString());
+    if (params.page) queryParams.append("page", params.page.toString());
+    const queryString = queryParams.toString();
+    if (queryString) url += `?${queryString}`;
+  }
+  return await apiCall(url, "GET", undefined, token);
+};
+
+// GET /api/admin/cart/custom-orders/{id}
+export const getCustomOrder = async (
+  id: number | string,
+  token: string
+): Promise<any> => {
+  return await apiCall(
+    API_ENDPOINTS.ADMIN.CustomOrderShow(id),
+    "GET",
+    undefined,
+    token
+  );
+};
+
 // GET /api/admin/audit/requests
 export const getAuditRequests = async (
   token: string,
