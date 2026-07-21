@@ -1834,7 +1834,9 @@ const BNPLBuyNow: React.FC = () => {
 
   const resolveOrderCustomerType = (item: any, summary?: any) =>
     formatCustomerTypeLabel(
-      item?.customer_type ||
+      item?.audit_request?.customer_type ||
+        summary?.audit_request?.customer_type ||
+        item?.customer_type ||
         summary?.customer_type ||
         item?.loan_application?.customer_type ||
         null
