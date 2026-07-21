@@ -1834,8 +1834,10 @@ const BNPLBuyNow: React.FC = () => {
 
   const resolveOrderCustomerType = (item: any, summary?: any) =>
     formatCustomerTypeLabel(
-      item?.audit_request?.customer_type ||
-        summary?.audit_request?.customer_type ||
+      // Linked custom-order audit only (when API attaches audit_request on the order)
+      (item?.audit_request_id || summary?.audit_request_id
+        ? item?.audit_request?.customer_type || summary?.audit_request?.customer_type
+        : null) ||
         item?.customer_type ||
         summary?.customer_type ||
         item?.loan_application?.customer_type ||
