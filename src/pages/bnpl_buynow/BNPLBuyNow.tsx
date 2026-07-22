@@ -7668,6 +7668,7 @@ const BNPLBuyNow: React.FC = () => {
                             setShowUserDetailModal(false);
                             setCreateOrderForm({
                               user_id: String(customOrderDetail.user?.id || selectedUserId || ""),
+                              audit_request_id: "",
                               order_type: "buy_now",
                               items: [],
                               send_email: true,
