@@ -288,7 +288,7 @@ const CheckoutShopSettings = () => {
           </label>
           <label className="block">
             <span className="text-sm font-medium text-gray-700">
-              Insurance when installation is selected (% of items + installation)
+              Insurance when installation is selected (% of items subtotal)
             </span>
             <input
               type="number"
