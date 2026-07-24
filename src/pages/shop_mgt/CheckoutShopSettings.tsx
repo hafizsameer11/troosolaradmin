@@ -192,57 +192,52 @@ const CheckoutShopSettings = () => {
           </label>
         </div>
 
-        <div className="rounded-xl border border-[#273E8E]/15 bg-[#F5F7FF] p-4 space-y-3">
-          <p className="text-sm font-semibold text-gray-900">
-            Delivery fee by product category
-          </p>
-          <div className="grid grid-cols-1 gap-3">
-            {productCategories.map((cat) => (
-              <label key={cat.key} className="block">
-                <span className="text-sm font-medium text-gray-700">
-                  {cat.label}
-                </span>
-                <input
-                  type="number"
-                  min={0}
-                  className="mt-1 w-full max-w-xs border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                  value={
-                    form.category_delivery_fees?.[cat.key] ??
-                    settings.category_delivery_fees?.[cat.key] ??
-                    ""
-                  }
-                  onChange={(e) =>
-                    updateCategoryFee(
-                      "category_delivery_fees",
-                      cat.key,
-                      Number(e.target.value)
-                    )
-                  }
-                />
-              </label>
-            ))}
-          </div>
-        </div>
-
         <div className="rounded-xl border border-[#273E8E]/15 bg-white p-4 space-y-4">
           <div>
             <p className="text-sm font-semibold text-gray-900">
-              Product-only fees (Battery / Inverter / Solar panels)
+              Fees by product category
             </p>
             <p className="text-xs text-gray-600 mt-1">
-              Set separately for each category. Installation and inspection fees
-              apply only when the customer uses TrooSolar installer. Own installer
-              orders use delivery and, if selected, installation materials cost only.
+              Set delivery, installation, materials, and inspection separately
+              for each category
+              {channel === "shop"
+                ? " (used by Solar Shop cart when products match these categories)."
+                : ". Installation / inspection apply for TrooSolar installer on product-only Buy Now; bundles still use Bundle Mgt → Invoice fees."}
             </p>
           </div>
 
-          {productOnlyCategories.map((cat) => (
+          {(productCategories.length > 0
+            ? productCategories
+            : productOnlyCategories
+          ).map((cat) => (
             <div
               key={cat.key}
               className="rounded-lg border border-gray-200 p-3 space-y-3"
             >
               <p className="text-sm font-semibold text-[#273E8E]">{cat.label}</p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs font-medium text-gray-700">
+                    Delivery fee (₦)
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    value={
+                      form.category_delivery_fees?.[cat.key] ??
+                      settings.category_delivery_fees?.[cat.key] ??
+                      ""
+                    }
+                    onChange={(e) =>
+                      updateCategoryFee(
+                        "category_delivery_fees",
+                        cat.key,
+                        Number(e.target.value)
+                      )
+                    }
+                  />
+                </label>
                 <label className="block">
                   <span className="text-xs font-medium text-gray-700">
                     Installation fee (₦)
