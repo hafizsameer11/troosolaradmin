@@ -1,7 +1,10 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Cookies from "js-cookie";
-import { getCheckoutSettings } from "../../utils/queries/checkoutSettings";
+import {
+  getCheckoutSettings,
+  type CheckoutSettingsChannel,
+} from "../../utils/queries/checkoutSettings";
 import {
   updateCheckoutSettings,
   type CheckoutSettingsPayload,
@@ -13,10 +16,11 @@ const PRODUCT_ONLY_KEYS = ["battery-only", "inverter-only", "panels-only"];
 const CheckoutShopSettings = () => {
   const token = Cookies.get("token") || "";
   const queryClient = useQueryClient();
+  const [channel, setChannel] = useState<CheckoutSettingsChannel>("buy_now");
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["checkout-settings"],
-    queryFn: () => getCheckoutSettings(token),
+    queryKey: ["checkout-settings", channel],
+    queryFn: () => getCheckoutSettings(token, channel),
     enabled: !!token,
   });
 
@@ -44,14 +48,20 @@ const CheckoutShopSettings = () => {
         settings.installation_schedule_working_days,
       installation_description: settings.installation_description ?? "",
     });
-  }, [settings]);
+  }, [settings, channel]);
 
   const mutation = useMutation({
     mutationFn: (payload: CheckoutSettingsPayload) =>
-      updateCheckoutSettings(payload, token),
+      updateCheckoutSettings(payload, token, channel),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["checkout-settings"] });
-      alert("Checkout settings saved.");
+      void queryClient.invalidateQueries({
+        queryKey: ["checkout-settings", channel],
+      });
+      alert(
+        channel === "shop"
+          ? "Solar Shop checkout settings saved."
+          : "Buy Now checkout settings saved."
+      );
     },
     onError: () => {
       alert("Failed to save settings.");
@@ -60,7 +70,7 @@ const CheckoutShopSettings = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    mutation.mutate(form);
+    mutation.mutate({ ...form, channel });
   };
 
   const updateCategoryFee = (
@@ -115,10 +125,45 @@ const CheckoutShopSettings = () => {
 
   return (
     <div className="max-w-3xl">
+      <div className="flex flex-wrap gap-2 mb-4">
+        <button
+          type="button"
+          onClick={() => setChannel("buy_now")}
+          className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+            channel === "buy_now"
+              ? "bg-[#273E8E] text-white"
+              : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+          }`}
+        >
+          Buy Now / BNPL
+        </button>
+        <button
+          type="button"
+          onClick={() => setChannel("shop")}
+          className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+            channel === "shop"
+              ? "bg-[#273E8E] text-white"
+              : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+          }`}
+        >
+          Solar Shop (Cart)
+        </button>
+      </div>
+
       <p className="text-sm text-gray-600 mb-6">
-        Configure Buy Now / BNPL fees. Bundles use Bundle Mgt → Invoice fees.
-        Battery only / Inverter only / Solar panels only use the per-category
-        product fees below.
+        {channel === "shop" ? (
+          <>
+            Configure <strong>Solar Shop / add-to-cart</strong> checkout fees.
+            These are separate from Buy Now. Delivery, installation, inspection,
+            VAT, and insurance here apply only to cart checkout.
+          </>
+        ) : (
+          <>
+            Configure <strong>Buy Now / BNPL</strong> fees. Bundles use Bundle
+            Mgt → Invoice fees. Battery only / Inverter only / Solar panels only
+            use the per-category product fees below.
+          </>
+        )}
       </p>
 
       <form
@@ -128,8 +173,9 @@ const CheckoutShopSettings = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <label className="block sm:col-span-2">
             <span className="text-sm font-medium text-gray-700">
-              Default delivery fee (₦) — shop cart &amp; fallback when a category
-              fee is not set
+              {channel === "shop"
+                ? "Default delivery fee (₦) — cart fallback when a category fee is not set"
+                : "Default delivery fee (₦) — fallback when a category fee is not set"}
             </span>
             <input
               type="number"
@@ -307,7 +353,9 @@ const CheckoutShopSettings = () => {
           </label>
           <label className="block sm:col-span-2">
             <span className="text-sm font-medium text-gray-700">
-              Installation flat add-on (₦) — shop cart / legacy fallback only
+              {channel === "shop"
+                ? "Installation flat add-on (₦) — used when category installation fees are empty"
+                : "Installation flat add-on (₦) — legacy fallback only"}
             </span>
             <input
               type="number"

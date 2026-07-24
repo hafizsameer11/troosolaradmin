@@ -1,7 +1,9 @@
 import { apiCall } from "../customApiCall";
 import { API_ENDPOINTS } from "../../../apiConfig";
+import type { CheckoutSettingsChannel } from "../queries/checkoutSettings";
 
 export type CheckoutSettingsPayload = {
+  channel?: CheckoutSettingsChannel;
   delivery_fee?: number;
   category_delivery_fees?: Record<string, number>;
   category_installation_fees?: Record<string, number>;
@@ -21,12 +23,9 @@ export type CheckoutSettingsPayload = {
 
 export const updateCheckoutSettings = async (
   payload: CheckoutSettingsPayload,
-  token: string
+  token: string,
+  channel: CheckoutSettingsChannel = "buy_now"
 ): Promise<any> => {
-  return await apiCall(
-    API_ENDPOINTS.ADMIN.CheckoutSettingsUpdate,
-    "PUT",
-    payload,
-    token
-  );
+  const url = `${API_ENDPOINTS.ADMIN.CheckoutSettingsUpdate}?channel=${encodeURIComponent(channel)}`;
+  return await apiCall(url, "PUT", { ...payload, channel }, token);
 };
