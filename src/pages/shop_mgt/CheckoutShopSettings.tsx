@@ -175,7 +175,7 @@ const CheckoutShopSettings = () => {
             <span className="text-sm font-medium text-gray-700">
               {channel === "shop"
                 ? "Default delivery fee (₦) — cart fallback when a category fee is not set"
-                : "Default delivery fee (₦) — fallback when a category fee is not set"}
+                : "Default delivery fee (₦) — shop cart & fallback when a category fee is not set"}
             </span>
             <input
               type="number"
@@ -192,122 +192,255 @@ const CheckoutShopSettings = () => {
           </label>
         </div>
 
-        <div className="rounded-xl border border-[#273E8E]/15 bg-white p-4 space-y-4">
-          <div>
-            <p className="text-sm font-semibold text-gray-900">
-              Fees by product category
-            </p>
-            <p className="text-xs text-gray-600 mt-1">
-              Set delivery, installation, materials, and inspection separately
-              for each category
-              {channel === "shop"
-                ? " (used by Solar Shop cart when products match these categories)."
-                : ". Installation / inspection apply for TrooSolar installer on product-only Buy Now; bundles still use Bundle Mgt → Invoice fees."}
-            </p>
-          </div>
-
-          {(productCategories.length > 0
-            ? productCategories
-            : productOnlyCategories
-          ).map((cat) => (
-            <div
-              key={cat.key}
-              className="rounded-lg border border-gray-200 p-3 space-y-3"
-            >
-              <p className="text-sm font-semibold text-[#273E8E]">{cat.label}</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="text-xs font-medium text-gray-700">
-                    Delivery fee (₦)
-                  </span>
-                  <input
-                    type="number"
-                    min={0}
-                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                    value={
-                      form.category_delivery_fees?.[cat.key] ??
-                      settings.category_delivery_fees?.[cat.key] ??
-                      ""
-                    }
-                    onChange={(e) =>
-                      updateCategoryFee(
-                        "category_delivery_fees",
-                        cat.key,
-                        Number(e.target.value)
-                      )
-                    }
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-medium text-gray-700">
-                    Installation fee (₦)
-                  </span>
-                  <input
-                    type="number"
-                    min={0}
-                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                    value={
-                      form.category_installation_fees?.[cat.key] ??
-                      settings.category_installation_fees?.[cat.key] ??
-                      ""
-                    }
-                    onChange={(e) =>
-                      updateCategoryFee(
-                        "category_installation_fees",
-                        cat.key,
-                        Number(e.target.value)
-                      )
-                    }
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-medium text-gray-700">
-                    Installation materials (₦)
-                  </span>
-                  <input
-                    type="number"
-                    min={0}
-                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                    value={
-                      form.category_materials_fees?.[cat.key] ??
-                      settings.category_materials_fees?.[cat.key] ??
-                      ""
-                    }
-                    onChange={(e) =>
-                      updateCategoryFee(
-                        "category_materials_fees",
-                        cat.key,
-                        Number(e.target.value)
-                      )
-                    }
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-medium text-gray-700">
-                    Inspection fee (₦)
-                  </span>
-                  <input
-                    type="number"
-                    min={0}
-                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                    value={
-                      form.category_inspection_fees?.[cat.key] ??
-                      settings.category_inspection_fees?.[cat.key] ??
-                      ""
-                    }
-                    onChange={(e) =>
-                      updateCategoryFee(
-                        "category_inspection_fees",
-                        cat.key,
-                        Number(e.target.value)
-                      )
-                    }
-                  />
-                </label>
+        {channel === "buy_now" ? (
+          <>
+            {/* Buy Now / BNPL — keep original layout unchanged */}
+            <div className="rounded-xl border border-[#273E8E]/15 bg-[#F5F7FF] p-4 space-y-3">
+              <p className="text-sm font-semibold text-gray-900">
+                Delivery fee by product category
+              </p>
+              <div className="grid grid-cols-1 gap-3">
+                {productCategories.map((cat) => (
+                  <label key={cat.key} className="block">
+                    <span className="text-sm font-medium text-gray-700">
+                      {cat.label}
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      className="mt-1 w-full max-w-xs border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                      value={
+                        form.category_delivery_fees?.[cat.key] ??
+                        settings.category_delivery_fees?.[cat.key] ??
+                        ""
+                      }
+                      onChange={(e) =>
+                        updateCategoryFee(
+                          "category_delivery_fees",
+                          cat.key,
+                          Number(e.target.value)
+                        )
+                      }
+                    />
+                  </label>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
+
+            <div className="rounded-xl border border-[#273E8E]/15 bg-white p-4 space-y-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">
+                  Product-only fees (Battery / Inverter / Solar panels)
+                </p>
+                <p className="text-xs text-gray-600 mt-1">
+                  Set separately for each category. Installation and inspection
+                  fees apply only when the customer uses TrooSolar installer. Own
+                  installer orders use delivery and, if selected, installation
+                  materials cost only.
+                </p>
+              </div>
+
+              {productOnlyCategories.map((cat) => (
+                <div
+                  key={cat.key}
+                  className="rounded-lg border border-gray-200 p-3 space-y-3"
+                >
+                  <p className="text-sm font-semibold text-[#273E8E]">
+                    {cat.label}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <label className="block">
+                      <span className="text-xs font-medium text-gray-700">
+                        Installation fee (₦)
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                        value={
+                          form.category_installation_fees?.[cat.key] ??
+                          settings.category_installation_fees?.[cat.key] ??
+                          ""
+                        }
+                        onChange={(e) =>
+                          updateCategoryFee(
+                            "category_installation_fees",
+                            cat.key,
+                            Number(e.target.value)
+                          )
+                        }
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-medium text-gray-700">
+                        Installation materials (₦)
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                        value={
+                          form.category_materials_fees?.[cat.key] ??
+                          settings.category_materials_fees?.[cat.key] ??
+                          ""
+                        }
+                        onChange={(e) =>
+                          updateCategoryFee(
+                            "category_materials_fees",
+                            cat.key,
+                            Number(e.target.value)
+                          )
+                        }
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-medium text-gray-700">
+                        Inspection fee (₦)
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                        value={
+                          form.category_inspection_fees?.[cat.key] ??
+                          settings.category_inspection_fees?.[cat.key] ??
+                          ""
+                        }
+                        onChange={(e) =>
+                          updateCategoryFee(
+                            "category_inspection_fees",
+                            cat.key,
+                            Number(e.target.value)
+                          )
+                        }
+                      />
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Solar Shop cart only — per-category delivery + other fees together */}
+            <div className="rounded-xl border border-[#273E8E]/15 bg-white p-4 space-y-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">
+                  Fees by product category
+                </p>
+                <p className="text-xs text-gray-600 mt-1">
+                  Set delivery, installation, materials, and inspection for each
+                  category. Used only by Solar Shop cart checkout — not Buy Now
+                  or BNPL.
+                </p>
+              </div>
+
+              {(productCategories.length > 0
+                ? productCategories
+                : productOnlyCategories
+              ).map((cat) => (
+                <div
+                  key={cat.key}
+                  className="rounded-lg border border-gray-200 p-3 space-y-3"
+                >
+                  <p className="text-sm font-semibold text-[#273E8E]">
+                    {cat.label}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label className="block">
+                      <span className="text-xs font-medium text-gray-700">
+                        Delivery fee (₦)
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                        value={
+                          form.category_delivery_fees?.[cat.key] ??
+                          settings.category_delivery_fees?.[cat.key] ??
+                          ""
+                        }
+                        onChange={(e) =>
+                          updateCategoryFee(
+                            "category_delivery_fees",
+                            cat.key,
+                            Number(e.target.value)
+                          )
+                        }
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-medium text-gray-700">
+                        Installation fee (₦)
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                        value={
+                          form.category_installation_fees?.[cat.key] ??
+                          settings.category_installation_fees?.[cat.key] ??
+                          ""
+                        }
+                        onChange={(e) =>
+                          updateCategoryFee(
+                            "category_installation_fees",
+                            cat.key,
+                            Number(e.target.value)
+                          )
+                        }
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-medium text-gray-700">
+                        Installation materials (₦)
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                        value={
+                          form.category_materials_fees?.[cat.key] ??
+                          settings.category_materials_fees?.[cat.key] ??
+                          ""
+                        }
+                        onChange={(e) =>
+                          updateCategoryFee(
+                            "category_materials_fees",
+                            cat.key,
+                            Number(e.target.value)
+                          )
+                        }
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-medium text-gray-700">
+                        Inspection fee (₦)
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                        value={
+                          form.category_inspection_fees?.[cat.key] ??
+                          settings.category_inspection_fees?.[cat.key] ??
+                          ""
+                        }
+                        onChange={(e) =>
+                          updateCategoryFee(
+                            "category_inspection_fees",
+                            cat.key,
+                            Number(e.target.value)
+                          )
+                        }
+                      />
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <label className="block">
@@ -329,7 +462,9 @@ const CheckoutShopSettings = () => {
           </label>
           <label className="block">
             <span className="text-sm font-medium text-gray-700">
-              Insurance when installation is selected (% of items subtotal)
+              {channel === "shop"
+                ? "Insurance when installation is selected (% of items subtotal)"
+                : "Insurance when installation is selected (% of items + installation)"}
             </span>
             <input
               type="number"
@@ -350,7 +485,7 @@ const CheckoutShopSettings = () => {
             <span className="text-sm font-medium text-gray-700">
               {channel === "shop"
                 ? "Installation flat add-on (₦) — used when category installation fees are empty"
-                : "Installation flat add-on (₦) — legacy fallback only"}
+                : "Installation flat add-on (₦) — shop cart / legacy fallback only"}
             </span>
             <input
               type="number"
@@ -459,7 +594,9 @@ const CheckoutShopSettings = () => {
         {preview && settings && (
           <div className="rounded-xl bg-[#F5F7FF] border border-[#273E8E]/20 p-4 text-sm">
             <p className="font-medium text-gray-900 mb-2">
-              Live preview (matches cart checkout API)
+              {channel === "shop"
+                ? "Live preview (Solar Shop cart checkout)"
+                : "Live preview (Buy Now / BNPL checkout settings)"}
             </p>
             <ul className="space-y-1 text-gray-700">
               <li>
