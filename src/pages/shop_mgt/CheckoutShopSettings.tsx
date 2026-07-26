@@ -466,7 +466,7 @@ const CheckoutShopSettings = () => {
           <label className="block">
             <span className="text-sm font-medium text-gray-700">
               {channel === "shop"
-                ? "Insurance when installation is selected (% of items subtotal)"
+                ? "Insurance when selected at cart checkout (% of items subtotal)"
                 : "Insurance when installation is selected (% of items + installation)"}
             </span>
             <input

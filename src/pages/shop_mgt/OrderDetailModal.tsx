@@ -9,8 +9,17 @@ import { API_DOMAIN } from "../../../apiConfig";
 const formatNgn = (v: string | number | undefined | null) => {
   const n = Number(v);
   if (Number.isNaN(n)) return "—";
-  return `₦${n.toLocaleString()}`;
+  return `₦${n.toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 };
+
+const formatInvoiceAmount = (value: string | number | undefined | null) =>
+  Number(value || 0).toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 interface OrderLineItem {
   itemable_type?: string;
@@ -52,11 +61,16 @@ interface OrderDetailModalProps {
     online_checkout_discount_amount?: number | null;
     delivery_fee?: number | string;
     insurance_fee?: number | string;
+    insurance_fee_percentage?: number | string;
     installation_price?: number | string;
+    inspection_fee?: number | string;
+    material_cost?: number | string;
     include_installation?: boolean;
     installation_requested_date?: string | null;
     vat_amount?: number | string;
     vat_percentage?: number | string;
+    outright_discount_percentage?: number | string | null;
+    order_type?: string | null;
     estimated_delivery_from?: string;
     estimated_delivery_to?: string;
     delivery_estimate_label?: string;
@@ -154,7 +168,6 @@ const OrderDetailModal = ({ isOpen, order, onClose }: OrderDetailModalProps) => 
   const orderStatus = data.order_status || "—";
   const paymentStatus = data.payment_status || "—";
   const orderDate = data.created_at || "—";
-  const orderAmount = data.total_price != null ? formatNgn(data.total_price) : "—";
   const paymentMethod = data.payment_method || "—";
   const installation = data.installation || null;
 
@@ -180,29 +193,65 @@ const OrderDetailModal = ({ isOpen, order, onClose }: OrderDetailModalProps) => 
   const installationNum =
     data.installation_price != null ? Number(data.installation_price) : 0;
   const insuranceNum = data.insurance_fee != null ? Number(data.insurance_fee) : 0;
+  const inspectionNum =
+    data.inspection_fee != null ? Number(data.inspection_fee) : 0;
+  const materialNum =
+    data.material_cost != null ? Number(data.material_cost) : 0;
   const vatNum = data.vat_amount != null ? Number(data.vat_amount) : 0;
-  const vatPctNum = data.vat_percentage != null ? Number(data.vat_percentage) : 0;
+  const vatPctNum = data.vat_percentage != null ? Number(data.vat_percentage) : 7.5;
+  const insurancePctNum =
+    data.insurance_fee_percentage != null
+      ? Number(data.insurance_fee_percentage)
+      : 0;
+
+  const itemsFromLines =
+    lineItems.length > 0
+      ? lineItems.reduce((sum, row) => sum + Number(row.subtotal ?? 0), 0)
+      : 0;
 
   const itemsSubtotalNum =
     data.items_subtotal != null
       ? Number(data.items_subtotal)
-      : lineItems.length > 0
-        ? lineItems.reduce((sum, row) => sum + Number(row.subtotal ?? 0), 0)
-        : null;
+      : itemsFromLines > 0
+        ? itemsFromLines
+        : 0;
 
   const catalogItemsSubtotalNum =
-    data.catalog_items_subtotal != null ? Number(data.catalog_items_subtotal) : null;
-  const onlineCheckoutDiscountNum =
+    data.catalog_items_subtotal != null && Number(data.catalog_items_subtotal) > 0
+      ? Number(data.catalog_items_subtotal)
+      : itemsSubtotalNum;
+
+  let onlineCheckoutDiscountNum =
     data.online_checkout_discount_amount != null
       ? Number(data.online_checkout_discount_amount)
-      : null;
+      : 0;
+  if (
+    onlineCheckoutDiscountNum <= 0 &&
+    catalogItemsSubtotalNum > itemsSubtotalNum + 0.005
+  ) {
+    onlineCheckoutDiscountNum = catalogItemsSubtotalNum - itemsSubtotalNum;
+  }
+
   const firstLineDiscountPct = lineItems.find(
     (r) => Number(r.referral_outright_discount_percent ?? 0) > 0
   )?.referral_outright_discount_percent;
-  const discountPctLabel =
-    firstLineDiscountPct != null && String(firstLineDiscountPct).trim() !== ""
-      ? ` (${Number(firstLineDiscountPct)}%)`
-      : "";
+  const outrightDiscountPctRaw =
+    data.outright_discount_percentage != null
+      ? Number(data.outright_discount_percentage)
+      : firstLineDiscountPct != null
+        ? Number(firstLineDiscountPct)
+        : onlineCheckoutDiscountNum > 0 && catalogItemsSubtotalNum > 0
+          ? Math.round(
+              (onlineCheckoutDiscountNum / catalogItemsSubtotalNum) * 100
+            )
+          : 0;
+  const outrightDiscountPct = Math.round(Number(outrightDiscountPctRaw) || 0);
+
+  const serviceFeesTotal =
+    deliveryFeeNum + installationNum + materialNum + inspectionNum;
+  const totalAmountBeforeVatTax = itemsSubtotalNum + serviceFeesTotal;
+  const grandTotalNum =
+    data.total_price != null ? Number(data.total_price) : NaN;
 
   const preferredInstallDate =
     data.installation_requested_date ||
@@ -447,12 +496,6 @@ const OrderDetailModal = ({ isOpen, order, onClose }: OrderDetailModalProps) => 
                       Window: {fmtEst(data.estimated_delivery_from)} → {fmtEst(data.estimated_delivery_to)}
                     </p>
                   ) : null}
-                  <div className="flex justify-between gap-2 border-t border-gray-100 pt-3">
-                    <span className="text-gray-600">Delivery fee</span>
-                    <span className="text-[#273E8E] font-medium">
-                      {deliveryFeeNum > 0 ? formatNgn(deliveryFeeNum) : "Free"}
-                    </span>
-                  </div>
                   {data.include_installation || installationNum > 0 || preferredInstallDate ? (
                     <div className="border-t border-gray-100 pt-3 space-y-2">
                       <p className="text-[11px] font-semibold text-gray-700 uppercase tracking-wide">
@@ -479,98 +522,113 @@ const OrderDetailModal = ({ isOpen, order, onClose }: OrderDetailModalProps) => 
               </div>
             </div>
 
-            {/* Installation & insurance amounts */}
-            {(data.include_installation || installationNum > 0 || insuranceNum > 0) && (
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">Installation &amp; insurance</h3>
-                <div className="border border-gray-200 rounded-xl p-3 space-y-2 text-xs">
-                  {installation && (
-                    <div className="border border-dashed border-[#273E8E] rounded-lg p-2 bg-[#273E8E]/5 text-[12px] text-[#273E8E]">
-                      Installation is coordinated after delivery.{" "}
-                      {installation.technician_name
-                        ? `Assigned: ${installation.technician_name}.`
-                        : "Technician assigned closer to the visit."}
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Installation total</span>
-                    <span className="text-[#273E8E] font-medium">
-                      {installationNum > 0 ? formatNgn(installationNum) : "—"}
-                    </span>
-                  </div>
-                  {insuranceNum > 0 ? (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Insurance</span>
-                      <span className="text-[#273E8E] font-medium">{formatNgn(insuranceNum)}</span>
-                    </div>
-                  ) : null}
-                </div>
+            {/* Payment summary — same breakdown as customer invoice / PaymentSummaryCard */}
+            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+              <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">
+                  Payment summary
+                </h3>
               </div>
-            )}
-
-            {/* Payment summary */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900 mb-2">Payment summary</h3>
-              <div className="space-y-2 text-xs rounded-xl p-3 border border-gray-200">
-                <div className="flex justify-between border-b border-gray-100 pb-2">
+              <div className="px-4 py-2 text-sm">
+                <div className="flex justify-between items-center py-2.5 border-b border-gray-100">
                   <span className="text-gray-600">Payment method</span>
-                  <span className="text-gray-900 capitalize">{paymentMethod}</span>
+                  <span className="text-gray-900 capitalize font-medium">{paymentMethod}</span>
                 </div>
-                {onlineCheckoutDiscountNum != null &&
-                onlineCheckoutDiscountNum > 0 &&
-                catalogItemsSubtotalNum != null &&
-                !Number.isNaN(catalogItemsSubtotalNum) &&
-                itemsSubtotalNum != null &&
-                !Number.isNaN(itemsSubtotalNum) ? (
-                  <>
-                    <div className="flex justify-between border-b border-gray-100 pb-2">
-                      <span className="text-gray-600">Items subtotal (before discount)</span>
-                      <span className="text-gray-900">{formatNgn(catalogItemsSubtotalNum)}</span>
-                    </div>
-                    <div className="flex justify-between border-b border-gray-100 pb-2">
-                      <span className="text-gray-600">Online checkout discount{discountPctLabel}</span>
-                      <span className="text-red-600 font-medium">
-                        −{formatNgn(onlineCheckoutDiscountNum)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between border-b border-gray-100 pb-2">
-                      <span className="text-gray-600">Items after discount</span>
-                      <span className="text-gray-900 font-medium">{formatNgn(itemsSubtotalNum)}</span>
-                    </div>
-                  </>
-                ) : itemsSubtotalNum != null && !Number.isNaN(itemsSubtotalNum) ? (
-                  <div className="flex justify-between border-b border-gray-100 pb-2">
-                    <span className="text-gray-600">Items subtotal</span>
-                    <span className="text-gray-900">{formatNgn(itemsSubtotalNum)}</span>
-                  </div>
-                ) : null}
-                <div className="flex justify-between border-b border-gray-100 pb-2">
-                  <span className="text-gray-600">Delivery fee</span>
-                  <span className="text-gray-900">
-                    {deliveryFeeNum > 0 ? formatNgn(deliveryFeeNum) : "Free"}
+                <div className="flex justify-between items-center py-2.5">
+                  <span className="text-gray-700">Sub-Total</span>
+                  <span className="font-semibold tabular-nums text-gray-900">
+                    ₦{formatInvoiceAmount(catalogItemsSubtotalNum)}
                   </span>
                 </div>
+                {onlineCheckoutDiscountNum > 0 ? (
+                  <div className="flex justify-between items-center py-2.5">
+                    <span className="text-gray-700">
+                      {outrightDiscountPct > 0
+                        ? `Discount (${outrightDiscountPct}%)`
+                        : "Discount"}
+                    </span>
+                    <span className="font-semibold tabular-nums text-green-700">
+                      -₦{formatInvoiceAmount(onlineCheckoutDiscountNum)}
+                    </span>
+                  </div>
+                ) : null}
+                <div className="flex justify-between items-center py-2.5 font-medium">
+                  <span className="text-gray-700">Net Total</span>
+                  <span className="font-semibold tabular-nums text-gray-900">
+                    ₦{formatInvoiceAmount(itemsSubtotalNum)}
+                  </span>
+                </div>
+                <hr className="border-0 border-t border-gray-300 my-1" />
+                {deliveryFeeNum > 0 ? (
+                  <div className="flex justify-between items-center py-2.5">
+                    <span className="text-gray-700">Delivery Fee</span>
+                    <span className="font-semibold tabular-nums text-gray-900">
+                      +₦{formatInvoiceAmount(deliveryFeeNum)}
+                    </span>
+                  </div>
+                ) : null}
                 {installationNum > 0 ? (
-                  <div className="flex justify-between border-b border-gray-100 pb-2">
-                    <span className="text-gray-600">Installation</span>
-                    <span className="text-gray-900">{formatNgn(installationNum)}</span>
+                  <div className="flex justify-between items-center py-2.5">
+                    <span className="text-gray-700">Installation Fee</span>
+                    <span className="font-semibold tabular-nums text-gray-900">
+                      +₦{formatInvoiceAmount(installationNum)}
+                    </span>
                   </div>
                 ) : null}
+                {inspectionNum > 0 ? (
+                  <div className="flex justify-between items-center py-2.5">
+                    <span className="text-gray-700">Inspection Fee</span>
+                    <span className="font-semibold tabular-nums text-gray-900">
+                      +₦{formatInvoiceAmount(inspectionNum)}
+                    </span>
+                  </div>
+                ) : null}
+                {materialNum > 0 ? (
+                  <div className="flex justify-between items-center py-2.5">
+                    <span className="text-gray-700">Installation Materials Cost</span>
+                    <span className="font-semibold tabular-nums text-gray-900">
+                      +₦{formatInvoiceAmount(materialNum)}
+                    </span>
+                  </div>
+                ) : null}
+                <hr className="border-0 border-t border-gray-300 my-1" />
+                <div className="flex justify-between items-center py-2.5 font-medium">
+                  <span className="text-gray-700">Total Amount</span>
+                  <span className="font-semibold tabular-nums text-gray-900">
+                    ₦{formatInvoiceAmount(totalAmountBeforeVatTax)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2.5">
+                  <span className="text-gray-700">
+                    VAT ({vatPctNum}% of Total Amount)
+                  </span>
+                  <span className="font-semibold tabular-nums text-gray-900">
+                    +₦{formatInvoiceAmount(vatNum)}
+                  </span>
+                </div>
                 {insuranceNum > 0 ? (
-                  <div className="flex justify-between border-b border-gray-100 pb-2">
-                    <span className="text-gray-600">Insurance</span>
-                    <span className="text-gray-900">{formatNgn(insuranceNum)}</span>
+                  <div className="flex justify-between items-center py-2.5">
+                    <span className="text-gray-700">
+                      Insurance Fee (
+                      {insurancePctNum > 0 ? `${insurancePctNum}%` : "—"} of
+                      Sub-Total)
+                    </span>
+                    <span className="font-semibold tabular-nums text-gray-900">
+                      +₦{formatInvoiceAmount(insuranceNum)}
+                    </span>
                   </div>
                 ) : null}
-                {vatNum > 0 ? (
-                  <div className="flex justify-between border-b border-gray-100 pb-2">
-                    <span className="text-gray-600">VAT{vatPctNum > 0 ? ` (${vatPctNum}%)` : ""}</span>
-                    <span className="text-gray-900">{formatNgn(vatNum)}</span>
-                  </div>
-                ) : null}
-                <div className="flex justify-between font-semibold pt-1">
-                  <span className="text-gray-800">Order total (incl. VAT)</span>
-                  <span className="text-[#273E8E]">{orderAmount}</span>
+                <hr className="border-0 border-t border-gray-300 my-1" />
+                <div className="flex justify-between items-center py-3">
+                  <span className="font-bold text-base uppercase text-[#273e8e] tracking-wide">
+                    Grand Total
+                  </span>
+                  <span className="font-bold text-xl text-[#273e8e] tabular-nums">
+                    ₦
+                    {formatInvoiceAmount(
+                      Number.isFinite(grandTotalNum) ? grandTotalNum : 0
+                    )}
+                  </span>
                 </div>
               </div>
             </div>

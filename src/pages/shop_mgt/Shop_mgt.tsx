@@ -76,6 +76,7 @@ interface ApiOrder {
 const Shop_mgt = () => {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("Shop Orders");
+  const [productsResetKey, setProductsResetKey] = useState(0);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(false);
   const [statusFilter, setStatusFilter] = useState("Status");
@@ -351,7 +352,13 @@ const Shop_mgt = () => {
                     ? "border-[#273E8E] text-black"
                     : "border-transparent text-[#00000080]"
                     }`}
-                  onClick={() => setActiveTab("Products")}
+                  onClick={() => {
+                    if (activeTab === "Products") {
+                      // Re-click Products heading: clear filters / remount catalog
+                      setProductsResetKey((k) => k + 1);
+                    }
+                    setActiveTab("Products");
+                  }}
                 >
                   Products
                 </button>
@@ -768,7 +775,7 @@ const Shop_mgt = () => {
         )}
 
         {/* Products Tab Content */}
-        {activeTab === "Products" && <Product />}
+        {activeTab === "Products" && <Product key={productsResetKey} />}
 
         {activeTab === "Checkout settings" && <CheckoutShopSettings />}
 

@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { productData } from "./shpmgt";
 import type { ProductData } from "./shpmgt";
 import ProductDetails from "./ProductDetails";
 import AddProduct from "./AddProduct";
@@ -174,10 +173,8 @@ const Product = () => {
   const [selectedBundle, setSelectedBundle] = useState<any>(null);
   const [editBundleData, setEditBundleData] = useState<any>(null);
   const [isProductBuilderOpen, setIsProductBuilderOpen] = useState(false);
-  const [productPage, setProductPage] = useState(1);
-  const [bundlePage, setBundlePage] = useState(1);
-  const productsPerPage = 12;
-  const bundlesPerPage = 6;
+  const [catalogPage, setCatalogPage] = useState(1);
+  const itemsPerPage = 12;
 
   // Get token from cookies
   const token = Cookies.get('token') || '';
@@ -339,30 +336,77 @@ const Product = () => {
     return filtered;
   }, [apiProducts, searchQuery, selectedCategory, selectedBrand, selectedAvailability, apiCategories, apiBrands]);
 
-  const paginatedProducts = useMemo(() => {
-    const start = (productPage - 1) * productsPerPage;
-    return filteredProducts.slice(start, start + productsPerPage);
-  }, [filteredProducts, productPage]);
-
   const validBundles = useMemo(
     () => apiBundles.filter((b) => !!b.title && Number(b.total_price) > 0),
     [apiBundles]
   );
-  const paginatedBundles = useMemo(() => {
-    const start = (bundlePage - 1) * bundlesPerPage;
-    return validBundles.slice(start, start + bundlesPerPage);
-  }, [validBundles, bundlePage]);
 
-  const productTotalPages = Math.max(1, Math.ceil(filteredProducts.length / productsPerPage));
-  const bundleTotalPages = Math.max(1, Math.ceil(validBundles.length / bundlesPerPage));
+  // Bundles share search; hide when product-only filters (category/brand/stock) are active
+  const filteredBundles = useMemo(() => {
+    const productOnlyFilterActive =
+      selectedCategory !== "Categories" ||
+      !!selectedBrand ||
+      selectedAvailability === "Out of Stock";
+    if (productOnlyFilterActive) return [];
+
+    let filtered = validBundles;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter((b) =>
+        String(b.title || "").toLowerCase().includes(q)
+      );
+    }
+    return filtered;
+  }, [
+    validBundles,
+    searchQuery,
+    selectedCategory,
+    selectedBrand,
+    selectedAvailability,
+  ]);
+
+  type CatalogItem =
+    | { kind: "product"; product: ApiProduct }
+    | { kind: "bundle"; bundle: ApiBundle };
+
+  // Interleave products + bundles (same idea as Solar Store “All”)
+  const catalogItems = useMemo(() => {
+    const products: CatalogItem[] = filteredProducts.map((product) => ({
+      kind: "product",
+      product,
+    }));
+    const bundles: CatalogItem[] = filteredBundles.map((bundle) => ({
+      kind: "bundle",
+      bundle,
+    }));
+    const mixed: CatalogItem[] = [];
+    const maxLen = Math.max(products.length, bundles.length);
+    for (let i = 0; i < maxLen; i += 1) {
+      if (i < products.length) mixed.push(products[i]);
+      if (i < bundles.length) mixed.push(bundles[i]);
+    }
+    return mixed;
+  }, [filteredProducts, filteredBundles]);
+
+  const paginatedCatalog = useMemo(() => {
+    const start = (catalogPage - 1) * itemsPerPage;
+    return catalogItems.slice(start, start + itemsPerPage);
+  }, [catalogItems, catalogPage]);
+
+  const catalogTotalPages = Math.max(
+    1,
+    Math.ceil(catalogItems.length / itemsPerPage)
+  );
 
   useEffect(() => {
-    setProductPage(1);
-  }, [searchQuery, selectedCategory, selectedBrand, selectedAvailability, filteredProducts.length]);
-
-  useEffect(() => {
-    setBundlePage(1);
-  }, [validBundles.length]);
+    setCatalogPage(1);
+  }, [
+    searchQuery,
+    selectedCategory,
+    selectedBrand,
+    selectedAvailability,
+    catalogItems.length,
+  ]);
 
   // Handle image loading states
   const handleImageLoad = (imageId: string) => {
@@ -597,7 +641,7 @@ const Product = () => {
         <div className="relative">
           <input
             type="text"
-            placeholder="Search products..."
+            placeholder="Search products & bundles..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10 pr-4 py-2 bg-white border border-[#00000080] rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm w-180"
@@ -620,267 +664,304 @@ const Product = () => {
         </div>
       </div>
 
-      {/* Main Content Layout */}
-      <div className="flex gap-4">
-        {/* All Products Section */}
-        <div className="flex-1">
-          <h2 className="text-lg font-bold text-gray-900 mb-6">All Products</h2>
+      {/* Main Content Layout — products & bundles interleaved in one grid */}
+      <div>
+        <h2 className="text-lg font-bold text-gray-900 mb-6">All Products & Bundles</h2>
 
-          {/* Product Grid */}
-          {productsLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
-              {[...Array(8)].map((_, _index) => (
-                <div
-                  key={_index}
-                  className="bg-white rounded-2xl border border-[#CDCDCD] shadow-sm animate-pulse"
-                >
-                  <div className="aspect-square bg-gray-200 rounded-t-2xl"></div>
-                  <div className="p-2.5">
-                    <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                    <div className="border-b border-t pt-3 pb-3 border-[#CDCDCD]">
-                      <div className="h-6 bg-gray-200 rounded mb-2"></div>
-                      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                    </div>
-                    <div className="flex justify-between items-center mt-5">
-                      <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                      <div className="h-8 bg-gray-200 rounded-full w-20"></div>
-                    </div>
+        {productsLoading || bundlesLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+            {[...Array(8)].map((_, _index) => (
+              <div
+                key={_index}
+                className="bg-white rounded-2xl border border-[#CDCDCD] shadow-sm animate-pulse"
+              >
+                <div className="aspect-square bg-gray-200 rounded-t-2xl"></div>
+                <div className="p-2.5">
+                  <div className="h-4 bg-gray-200 rounded mb-2"></div>
+                  <div className="border-b border-t pt-3 pb-3 border-[#CDCDCD]">
+                    <div className="h-6 bg-gray-200 rounded mb-2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                  </div>
+                  <div className="flex justify-between items-center mt-5">
+                    <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                    <div className="h-8 bg-gray-200 rounded-full w-20"></div>
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : productsError ? (
-            <div className="text-center py-8">
-              <p className="text-red-500">Error loading products. Using fallback data.</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 mt-4">
-                {productData.map((product: ProductData) => (
-                  <div
-                    key={product.id}
-                    onClick={() => handleViewDetails(product)}
-                    className="bg-white rounded-2xl border border-[#CDCDCD] shadow-sm hover:shadow-lg transition-shadow relative overflow-hidden cursor-pointer"
-                  >
-                    <div 
-                      className="aspect-square bg-white overflow-hidden p-2.5 relative"
-                      onClick={(e) => {
-                        e.stopPropagation(); // Prevent double-triggering
-                        handleViewDetails(product);
-                      }}
-                    >
-                      <img
-                        src={product.image || "/assets/images/newman1.png"}
-                        alt={product.name}
-                        className="w-full h-full object-cover cursor-pointer"
-                        onClick={(e) => {
-                          e.stopPropagation(); // Prevent double-triggering
-                          handleViewDetails(product);
-                        }}
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = "/assets/images/newmanbadge.png";
-                        }}
-                      />
-                    </div>
-                    <div className="p-2.5">
-                      <h3 className="font-medium text-black text-md leading-tight mb-2">
-                        {product.name}
-                      </h3>
-                      <div className="border-b border-t pt-3 pb-3 border-[#CDCDCD] flex flex-row justify-between">
-                        <div className="flex flex-col">
-                          <div>
-                            <span className="text-[#273E8E] font-bold text-[20px]">
-                              N2,500,000
-                            </span>
-                          </div>
-                          <div className="flex flex-row gap-1.5">
-                            <div>
-                              <span className="line-through text-[#00000080] text-[13px]">
-                                N5,500,000
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-[#FFA500] bg-[#FFA50033] rounded-full p-1">
-                                -50%
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex flex-col mt-[-5px]">
-                          <div>
-                            <span className="text-sm font-medium text-black text-[10px]">
-                              12/50
-                            </span>
-                            <div className="w-16 bg-[#D9D9D9] rounded-full h-2 mt-1">
-                              <div
-                                className="bg-gradient-to-r from-red-600 to-green-600 h-2 rounded-full"
-                                style={{ width: "75%" }}
-                              ></div>
-                            </div>
-                          </div>
-                          <div className="flex flex-row mt-2">
-                            {[1, 2, 3, 4, 5].map((star) => (
-                              <svg
-                                key={star}
-                                className={`w-3 h-3 ${star <= 4 ? "text-[#273E8E]" : "text-[#D9D9D9]"
-                                  }`}
-                                fill="currentColor"
-                                viewBox="0 0 20 20"
-                              >
-                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                              </svg>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between mt-5">
-                        <span className="text-xs font-semibold text-black text-[15px]">
-                          {product.stock} Orders
-                        </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation(); // Prevent triggering parent div's onClick
-                            handleViewDetails(product);
-                          }}
-                          className="bg-[#273E8E] hover:bg-[#1e3270] text-white py-3 px-6 rounded-full text-xs font-semibold transition-colors cursor-pointer"
-                        >
-                          View Details
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
               </div>
-            </div>
-          ) : (
-            <>
+            ))}
+          </div>
+        ) : productsError && bundlesError ? (
+          <div className="text-center py-8">
+            <p className="text-red-500">Error loading catalog. Please try again.</p>
+          </div>
+        ) : (
+          <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
-              {filteredProducts.length > 0 ? paginatedProducts.map((product: ApiProduct) => {
-                const discountPercentage = calculateDiscountPercentage(product.price, product.discount_price);
-                const stockQty = parseStockQuantity(product.stock);
-                const oldQty = parseOldQuantity(product.old_quantity, stockQty);
-                const stockPercentage = Math.max(0, Math.min(100, Math.round((stockQty / oldQty) * 100)));
-                const avgRating = getAverageRating(product.reviews);
+              {catalogItems.length > 0 ? (
+                paginatedCatalog.map((item) => {
+                  if (item.kind === "product") {
+                    const product = item.product;
+                    const discountPercentage = calculateDiscountPercentage(
+                      product.price,
+                      product.discount_price
+                    );
+                    const stockQty = parseStockQuantity(product.stock);
+                    const oldQty = parseOldQuantity(product.old_quantity, stockQty);
+                    const stockPercentage = Math.max(
+                      0,
+                      Math.min(100, Math.round((stockQty / oldQty) * 100))
+                    );
+                    const avgRating = getAverageRating(product.reviews);
 
-                // Convert API product to ProductData format for compatibility
-                const convertedProduct: ProductData = {
-                  id: product.id.toString(),
-                  name: product.title,
-                  category: "Solar Equipment", // Default category
-                  price: formatPrice(product.discount_price),
-                  stock: stockQty,
-                  status: "Active",
-                  image: getImageUrl(product.featured_image_url),
-                  description: product.details.map(d => d.detail).join(", ") || "No description available"
-                };
+                    const convertedProduct: ProductData = {
+                      id: product.id.toString(),
+                      name: product.title,
+                      category: "Solar Equipment",
+                      price: formatPrice(product.discount_price),
+                      stock: stockQty,
+                      status: "Active",
+                      image: getImageUrl(product.featured_image_url),
+                      description:
+                        product.details.map((d) => d.detail).join(", ") ||
+                        "No description available",
+                    };
 
-                return (
-                  <div
-                    key={product.id}
-                    onClick={() => handleViewDetails(convertedProduct)}
-                    className="bg-white rounded-2xl border border-[#CDCDCD] shadow-sm hover:shadow-lg transition-shadow relative overflow-hidden cursor-pointer"
-                  >
-                    {/* Product Image */}
-                    <div 
-                      className="aspect-square bg-white overflow-hidden p-2.5 relative"
-                      onClick={(e) => {
-                        e.stopPropagation(); // Prevent double-triggering
-                        handleViewDetails(convertedProduct);
-                      }}
-                    >
-                      {imageLoadingStates[`product-${product.id}`] && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#273E8E]"></div>
-                        </div>
-                      )}
-                      <img
-                        src={getImageUrl(product.featured_image_url)}
-                        alt={product.title}
-                        className="w-full h-full object-cover cursor-pointer"
-                        onLoad={() => handleImageLoad(`product-${product.id}`)}
-                        onError={() => {
-                          handleImageError(`product-${product.id}`);
-                          const img = document.querySelector(`img[alt="${product.title}"]`) as HTMLImageElement;
-                          if (img) img.src = "/assets/images/newmanbadge.png";
-                        }}
-                        style={{ display: imageLoadingStates[`product-${product.id}`] ? 'none' : 'block' }}
-                        onClick={(e) => {
-                          e.stopPropagation(); // Prevent double-triggering
-                          handleViewDetails(convertedProduct);
-                        }}
-                      />
-                    </div>
-
-                    {/* Product Info */}
-                    <div className="p-2.5">
-                      <h3 className="font-medium text-black text-md leading-tight mb-2">
-                        {product.title}
-                      </h3>
-
-                      <div className="border-b border-t pt-3 pb-3 border-[#CDCDCD] flex flex-row justify-between">
-                        <div className="flex flex-col">
-                          <div>
-                            <span className="text-[#273E8E] font-bold text-[20px]">
-                              {formatPrice(product.discount_price)}
-                            </span>
-                          </div>
-                          <div className="flex flex-row gap-1.5">
-                            {discountPercentage > 0 && (
-                              <>
-                                <div>
-                                  <span className="line-through text-[#00000080] text-[13px]">
-                                    {formatPrice(product.price)}
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="text-[#FFA500] bg-[#FFA50033] rounded-full p-1 text-[10px]">
-                                    -{discountPercentage}%
-                                  </span>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex flex-col mt-[-5px]">
-                          <div>
-                            <span className="text-sm font-medium text-black text-[10px]">
-                              {stockQty}/{oldQty}
-                            </span>
-                            <div className="w-16 bg-[#D9D9D9] rounded-full h-2 mt-1">
-                              <div
-                                className="bg-gradient-to-r from-red-600 to-green-600 h-2 rounded-full"
-                                style={{ width: `${stockPercentage}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                          {renderStars(avgRating)}
-                        </div>
-                      </div>
-
-                      {/* Bottom Section - Orders and Button */}
-                      <div className="flex items-center justify-between mt-5">
-                        <span className="text-xs font-semibold text-black text-[15px]">
-                          {stockQty} Stocks
-                        </span>
-                        <button
+                    return (
+                      <div
+                        key={`product-${product.id}`}
+                        onClick={() => handleViewDetails(convertedProduct)}
+                        className="bg-white rounded-2xl border border-[#CDCDCD] shadow-sm hover:shadow-lg transition-shadow relative overflow-hidden cursor-pointer"
+                      >
+                        <div
+                          className="aspect-square bg-white overflow-hidden p-2.5 relative"
                           onClick={(e) => {
-                            e.stopPropagation(); // Prevent triggering parent div's onClick
+                            e.stopPropagation();
                             handleViewDetails(convertedProduct);
                           }}
-                          className="bg-[#273E8E] hover:bg-[#1e3270] text-white py-3 px-6 rounded-full text-xs font-semibold transition-colors cursor-pointer"
                         >
-                          View Details
-                        </button>
+                          {imageLoadingStates[`product-${product.id}`] && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#273E8E]"></div>
+                            </div>
+                          )}
+                          <img
+                            src={getImageUrl(product.featured_image_url)}
+                            alt={product.title}
+                            className="w-full h-full object-cover cursor-pointer"
+                            onLoad={() => handleImageLoad(`product-${product.id}`)}
+                            onError={() => {
+                              handleImageError(`product-${product.id}`);
+                              const img = document.querySelector(
+                                `img[alt="${product.title}"]`
+                              ) as HTMLImageElement;
+                              if (img) img.src = "/assets/images/newmanbadge.png";
+                            }}
+                            style={{
+                              display: imageLoadingStates[`product-${product.id}`]
+                                ? "none"
+                                : "block",
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewDetails(convertedProduct);
+                            }}
+                          />
+                        </div>
+
+                        <div className="p-2.5">
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <h3 className="font-medium text-black text-md leading-tight">
+                              {product.title}
+                            </h3>
+                            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#273E8E] bg-[#273E8E14] px-2 py-0.5 rounded-full">
+                              Product
+                            </span>
+                          </div>
+
+                          <div className="border-b border-t pt-3 pb-3 border-[#CDCDCD] flex flex-row justify-between">
+                            <div className="flex flex-col">
+                              <div>
+                                <span className="text-[#273E8E] font-bold text-[20px]">
+                                  {formatPrice(product.discount_price)}
+                                </span>
+                              </div>
+                              <div className="flex flex-row gap-1.5">
+                                {discountPercentage > 0 && (
+                                  <>
+                                    <div>
+                                      <span className="line-through text-[#00000080] text-[13px]">
+                                        {formatPrice(product.price)}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="text-[#FFA500] bg-[#FFA50033] rounded-full p-1 text-[10px]">
+                                        -{discountPercentage}%
+                                      </span>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex flex-col mt-[-5px]">
+                              <div>
+                                <span className="text-sm font-medium text-black text-[10px]">
+                                  {stockQty}/{oldQty}
+                                </span>
+                                <div className="w-16 bg-[#D9D9D9] rounded-full h-2 mt-1">
+                                  <div
+                                    className="bg-gradient-to-r from-red-600 to-green-600 h-2 rounded-full"
+                                    style={{ width: `${stockPercentage}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                              {renderStars(avgRating)}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between mt-5">
+                            <span className="text-xs font-semibold text-black text-[15px]">
+                              {stockQty} Stocks
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleViewDetails(convertedProduct);
+                              }}
+                              className="bg-[#273E8E] hover:bg-[#1e3270] text-white py-3 px-6 rounded-full text-xs font-semibold transition-colors cursor-pointer"
+                            >
+                              View Details
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  const bundle = item.bundle;
+                  const discountPercentage = calculateDiscountPercentage(
+                    bundle.total_price,
+                    bundle.discount_price
+                  );
+                  const borderColor =
+                    bundle.bundle_type === "Mini" ? "#800080" : "#FF0000";
+
+                  return (
+                    <div
+                      key={`bundle-${bundle.id}`}
+                      className="bg-white rounded-2xl border shadow-sm hover:shadow-lg transition-shadow relative overflow-hidden cursor-pointer"
+                      style={{ borderColor }}
+                      onClick={() => handleBundleActions(bundle)}
+                    >
+                      <div className="aspect-square bg-white overflow-hidden p-2.5 relative">
+                        {bundleImageLoadingStates[`bundle-${bundle.id}`] && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#273E8E]"></div>
+                          </div>
+                        )}
+                        <img
+                          src={getImageUrl(bundle.featured_image_url)}
+                          alt={bundle.title || "Bundle"}
+                          className="w-full h-full object-contain"
+                          onLoad={() => handleBundleImageLoad(`bundle-${bundle.id}`)}
+                          onError={() => {
+                            handleBundleImageError(`bundle-${bundle.id}`);
+                            const img = document.querySelector(
+                              `img[alt="${bundle.title}"]`
+                            ) as HTMLImageElement;
+                            if (img) {
+                              img.src =
+                                bundle.bundle_type === "Mini"
+                                  ? images.minibundle
+                                  : images.maxibundle;
+                            }
+                          }}
+                          style={{
+                            display: bundleImageLoadingStates[`bundle-${bundle.id}`]
+                              ? "none"
+                              : "block",
+                          }}
+                        />
+                      </div>
+                      <div className="p-2.5">
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <h3 className="font-medium text-gray-900 text-md leading-tight">
+                            {bundle.title}
+                          </h3>
+                          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#E8A91D] bg-[#E8A91D22] px-2 py-0.5 rounded-full">
+                            Bundle
+                          </span>
+                        </div>
+                        <div className="border-t pt-3 pb-3 border-[#CDCDCD] flex flex-row justify-between">
+                          <div className="flex flex-col">
+                            <div>
+                              <span className="text-[#273E8E] font-bold text-[20px]">
+                                {formatPrice(bundle.discount_price)}
+                              </span>
+                            </div>
+                            <div className="flex flex-row gap-1.5">
+                              {discountPercentage > 0 && (
+                                <>
+                                  <div>
+                                    <span className="line-through text-[#00000080] text-[13px]">
+                                      {formatPrice(bundle.total_price)}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="text-[#FFA500] bg-[#FFA50033] rounded-full p-1 text-[10px]">
+                                      -{discountPercentage}%
+                                    </span>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex flex-col mt-[-5px]">
+                            <div>
+                              <span className="text-sm font-medium text-black text-[10px]">
+                                {bundle.bundle_items.length} items
+                              </span>
+                              <div className="w-16 bg-[#D9D9D9] rounded-full h-2 mt-1">
+                                <div
+                                  className="bg-gradient-to-r from-red-600 to-green-600 h-2 rounded-full"
+                                  style={{ width: "75%" }}
+                                ></div>
+                              </div>
+                            </div>
+                            {renderStars(0)}
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between mt-5">
+                          <span className="text-xs font-semibold text-black text-[15px]">
+                            {bundle.bundle_type || "Bundle"}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleBundleActions(bundle);
+                            }}
+                            className="bg-[#E8A91D] hover:bg-[#d89a1a] text-white py-3 px-6 rounded-full text-xs font-semibold transition-colors cursor-pointer"
+                          >
+                            Manage
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              }) : (
+                  );
+                })
+              ) : (
                 <div className="col-span-full text-center py-8">
                   <p className="text-gray-500">
-                    {searchQuery || selectedCategory !== "Categories" || selectedBrand || selectedAvailability !== "Availability"
-                      ? "No products found matching your filters"
-                      : "No products available"}
+                    {searchQuery ||
+                    selectedCategory !== "Categories" ||
+                    selectedBrand ||
+                    selectedAvailability !== "Availability"
+                      ? "No items found matching your filters"
+                      : "No products or bundles available"}
                   </p>
-                  {(searchQuery || selectedCategory !== "Categories" || selectedBrand || selectedAvailability !== "Availability") && (
+                  {(searchQuery ||
+                    selectedCategory !== "Categories" ||
+                    selectedBrand ||
+                    selectedAvailability !== "Availability") && (
                     <button
                       onClick={() => {
                         setSearchQuery("");
@@ -896,26 +977,29 @@ const Product = () => {
                 </div>
               )}
             </div>
-            {filteredProducts.length > 0 && productTotalPages > 1 && (
+            {catalogItems.length > 0 && catalogTotalPages > 1 && (
               <div className="flex items-center justify-between mt-4">
                 <span className="text-xs text-gray-600">
-                  Showing {(productPage - 1) * productsPerPage + 1}-
-                  {Math.min(productPage * productsPerPage, filteredProducts.length)} of {filteredProducts.length}
+                  Showing {(catalogPage - 1) * itemsPerPage + 1}-
+                  {Math.min(catalogPage * itemsPerPage, catalogItems.length)} of{" "}
+                  {catalogItems.length}
                 </span>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setProductPage((p) => Math.max(1, p - 1))}
-                    disabled={productPage === 1}
+                    onClick={() => setCatalogPage((p) => Math.max(1, p - 1))}
+                    disabled={catalogPage === 1}
                     className="px-3 py-1 text-xs border rounded disabled:opacity-50"
                   >
                     Prev
                   </button>
                   <span className="px-2 py-1 text-xs">
-                    {productPage}/{productTotalPages}
+                    {catalogPage}/{catalogTotalPages}
                   </span>
                   <button
-                    onClick={() => setProductPage((p) => Math.min(productTotalPages, p + 1))}
-                    disabled={productPage === productTotalPages}
+                    onClick={() =>
+                      setCatalogPage((p) => Math.min(catalogTotalPages, p + 1))
+                    }
+                    disabled={catalogPage === catalogTotalPages}
                     className="px-3 py-1 text-xs border rounded disabled:opacity-50"
                   >
                     Next
@@ -923,223 +1007,8 @@ const Product = () => {
                 </div>
               </div>
             )}
-            </>
-          )}
-        </div>
-
-        {/* Bundles Section */}
-        <div className="w-60 border-l border-[#00000080] pl-4">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">Bundles</h2>
-
-          {/* Bundle Cards */}
-          {bundlesLoading ? (
-            <div className="space-y-4">
-              {[...Array(2)].map((_, _index) => (
-                <div
-                  key={_index}
-                  className="bg-white rounded-lg border border-[#800080] shadow-sm animate-pulse"
-                >
-                  <div className="aspect-[4/3] bg-gray-200 rounded-lg"></div>
-                  <div className="p-2.5">
-                    <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                    <div className="border-t pt-3 pb-3 border-[#CDCDCD]">
-                      <div className="h-6 bg-gray-200 rounded mb-2"></div>
-                      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : bundlesError ? (
-            <div className="text-center py-4">
-              <p className="text-red-500 text-sm">Error loading bundles</p>
-              <div className="space-y-4 mt-4">
-                {/* Fallback Bundle 1 */}
-                <div className="bg-white rounded-lg border border-[#800080] shadow-sm relative">
-                  <div className="aspect-[4/3] bg-white rounded-lg overflow-hidden p-1.5">
-                    <img
-                      src={images.minibundle}
-                      alt="Newman Inverter Bundle"
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-                  <div className="p-2.5">
-                    <h3 className="font-medium text-gray-900 text-md mb-2">
-                      2 Newman Inverters + 1 Solar panel + 4 LED bulbs
-                    </h3>
-                    <div className="border-t pt-3 pb-3 border-[#CDCDCD] flex flex-row justify-between">
-                      <div className="flex flex-col">
-                        <div>
-                          <span className="text-[#273E8E] font-bold text-[20px]">
-                            N2,500,000
-                          </span>
-                        </div>
-                        <div className="flex flex-row gap-1.5">
-                          <div>
-                            <span className="line-through text-[#00000080] text-[13px]">
-                              N5,500,000
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-[#FFA500] bg-[#FFA50033] rounded-full p-1">
-                              -50%
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex flex-col mt-[-5px]">
-                        <div>
-                          <span className="text-sm font-medium text-black text-[10px]">
-                            12/50
-                          </span>
-                          <div className="w-16 bg-[#D9D9D9] rounded-full h-2 mt-1">
-                            <div
-                              className="bg-gradient-to-r from-red-600 to-green-600 h-2 rounded-full"
-                              style={{ width: "75%" }}
-                            ></div>
-                          </div>
-                        </div>
-                        <div className="flex flex-row mt-2">
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <svg
-                              key={star}
-                              className={`w-3 h-3 ${star <= 4 ? "text-[#273E8E]" : "text-[#D9D9D9]"
-                                }`}
-                              fill="currentColor"
-                              viewBox="0 0 20 20"
-                            >
-                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                            </svg>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <>
-            <div className="space-y-4">
-              {validBundles.length > 0 ? paginatedBundles.map((bundle: ApiBundle) => {
-                // Skip bundles with no title or invalid data
-                if (!bundle.title || bundle.total_price === 0) return null;
-
-                const discountPercentage = calculateDiscountPercentage(bundle.total_price, bundle.discount_price);
-                const borderColor = bundle.bundle_type === 'Mini' ? '#800080' : '#FF0000';
-
-                return (
-                  <div
-                    key={bundle.id}
-                    className="bg-white rounded-lg border shadow-sm relative cursor-pointer"
-                    style={{ borderColor }}
-                    onClick={() => handleBundleActions(bundle)}
-                  >
-                    <div className="aspect-[4/3] bg-white rounded-lg overflow-hidden p-1.5 relative">
-                      {bundleImageLoadingStates[`bundle-${bundle.id}`] && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#273E8E]"></div>
-                        </div>
-                      )}
-                      <img
-                        src={getImageUrl(bundle.featured_image_url)}
-                        alt={bundle.title}
-                        className="w-full h-full object-contain"
-                        onLoad={() => handleBundleImageLoad(`bundle-${bundle.id}`)}
-                        onError={() => {
-                          handleBundleImageError(`bundle-${bundle.id}`);
-                          const img = document.querySelector(`img[alt="${bundle.title}"]`) as HTMLImageElement;
-                          if (img) {
-                            img.src = bundle.bundle_type === 'Mini' ? images.minibundle : images.maxibundle;
-                          }
-                        }}
-                        style={{ display: bundleImageLoadingStates[`bundle-${bundle.id}`] ? 'none' : 'block' }}
-                      />
-                    </div>
-                    <div className="p-2.5">
-                      <h3 className="font-medium text-gray-900 text-md mb-2">
-                        {bundle.title}
-                      </h3>
-                      <div className="border-t pt-3 pb-3 border-[#CDCDCD] flex flex-row justify-between">
-                        <div className="flex flex-col">
-                          <div>
-                            <span className="text-[#273E8E] font-bold text-[20px]">
-                              {formatPrice(bundle.discount_price)}
-                            </span>
-                          </div>
-                          <div className="flex flex-row gap-1.5">
-                            {discountPercentage > 0 && (
-                              <>
-                                <div>
-                                  <span className="line-through text-[#00000080] text-[13px]">
-                                    {formatPrice(bundle.total_price)}
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="text-[#FFA500] bg-[#FFA50033] rounded-full p-1 text-[10px]">
-                                    -{discountPercentage}%
-                                  </span>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex flex-col mt-[-5px]">
-                          <div>
-                            <span className="text-sm font-medium text-black text-[10px]">
-                              {bundle.bundle_items.length} items
-                            </span>
-                            <div className="w-16 bg-[#D9D9D9] rounded-full h-2 mt-1">
-                              <div
-                                className="bg-gradient-to-r from-red-600 to-green-600 h-2 rounded-full"
-                                style={{ width: "75%" }}
-                              ></div>
-                            </div>
-                          </div>
-                          <div className="flex flex-row mt-2">
-                            {renderStars(0)}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }).filter(Boolean) : (
-                <div className="text-center py-4">
-                  <p className="text-gray-500 text-sm">No bundles available</p>
-                </div>
-              )}
-            </div>
-            {validBundles.length > 0 && bundleTotalPages > 1 && (
-              <div className="flex items-center justify-between mt-4">
-                <span className="text-xs text-gray-600">
-                  {(bundlePage - 1) * bundlesPerPage + 1}-
-                  {Math.min(bundlePage * bundlesPerPage, validBundles.length)} of {validBundles.length}
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setBundlePage((p) => Math.max(1, p - 1))}
-                    disabled={bundlePage === 1}
-                    className="px-3 py-1 text-xs border rounded disabled:opacity-50"
-                  >
-                    Prev
-                  </button>
-                  <span className="px-2 py-1 text-xs">
-                    {bundlePage}/{bundleTotalPages}
-                  </span>
-                  <button
-                    onClick={() => setBundlePage((p) => Math.min(bundleTotalPages, p + 1))}
-                    disabled={bundlePage === bundleTotalPages}
-                    className="px-3 py-1 text-xs border rounded disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
-            </>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
       {/* Product Details Modal */}
