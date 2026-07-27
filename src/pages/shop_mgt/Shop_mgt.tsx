@@ -124,12 +124,42 @@ const Shop_mgt = () => {
     mutationFn: async ({ orderId, status }: { orderId: string; status: string }) => {
       return await updateOrderStatus(orderId, { order_status: status }, token || "");
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["all-orders"] });
+    onSuccess: async (_data, variables) => {
+      // Update list immediately so the Status badge changes without a full page refresh.
+      queryClient.setQueryData(["all-orders"], (old: any) => {
+        if (!old || !Array.isArray(old.orders)) return old;
+        const orders = old.orders.map((o: ApiOrder) =>
+          String(o.id) === String(variables.orderId)
+            ? { ...o, order_status: variables.status }
+            : o
+        );
+        const summary = old.summary
+          ? {
+              ...old.summary,
+              pending_orders: orders.filter(
+                (o: ApiOrder) =>
+                  String(o.order_status || "").toLowerCase() === "pending"
+              ).length,
+              completed_orders: orders.filter((o: ApiOrder) => {
+                const s = String(o.order_status || "").toLowerCase();
+                return s === "delivered" || s === "completed";
+              }).length,
+              total_orders: orders.length,
+            }
+          : old.summary;
+        return { ...old, orders, summary };
+      });
+
       setShowStatusModal(false);
       setSelectedOrderForStatus(null);
       setSelectedStatus("");
-      console.log("Order status updated successfully");
+
+      // Pull fresh server data (and keep View Details in sync)
+      await queryClient.invalidateQueries({ queryKey: ["all-orders"] });
+      await queryClient.refetchQueries({ queryKey: ["all-orders"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["single-order-detail", Number(variables.orderId)],
+      });
     },
     onError: (error) => {
       console.error("Failed to update order status:", error);
@@ -390,12 +420,6 @@ const Shop_mgt = () => {
                     className="bg-[#273E8E]  hover:bg-[#273E8E] text-white px-8 py-3.5 rounded-full text-sm font-medium transition-colors shadow-sm cursor-pointer"
                   >
                     Upload Product
-                  </button>
-                  <button
-                    onClick={() => setIsProductBuilderOpen(true)}
-                    className="bg-[#E8A91D] hover:bg-[#E8A91D] text-white px-8 py-3.5 rounded-full text-sm font-medium transition-colors shadow-sm cursor-pointer"
-                  >
-                    Create Bundle
                   </button>
                 </div>
               )}
