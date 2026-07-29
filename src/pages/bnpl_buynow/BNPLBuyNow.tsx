@@ -6025,7 +6025,7 @@ const BNPLBuyNow: React.FC = () => {
                                 </h3>
                               </div>
                               <div className="px-4 py-2">
-                                {row("Sub-Total", subTotal)}
+                                {row("Item Subtotal", subTotal)}
                                 {discount > 0 &&
                                   row(`Discount (${discountPct}%)`, discount, {
                                     prefix: "-",
@@ -6055,7 +6055,7 @@ const BNPLBuyNow: React.FC = () => {
                                   })}
                                 {insuranceFee > 0 &&
                                   row(
-                                    `Insurance Fee (${insurancePct}% of Sub-Total)`,
+                                    `Insurance Fee (${insurancePct}% of Item Subtotal)`,
                                     insuranceFee,
                                     { prefix: "+" }
                                   )}

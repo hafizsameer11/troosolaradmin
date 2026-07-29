@@ -47,6 +47,7 @@ const CheckoutShopSettings = () => {
       installation_schedule_working_days:
         settings.installation_schedule_working_days,
       installation_description: settings.installation_description ?? "",
+      insurance_description: settings.insurance_description ?? "",
     });
   }, [settings, channel]);
 
@@ -593,6 +594,26 @@ const CheckoutShopSettings = () => {
             }
           />
         </label>
+
+        {channel === "shop" && (
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">
+              Insurance notice (shown in cart)
+            </span>
+            <textarea
+              rows={4}
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              value={form.insurance_description ?? ""}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  insurance_description: e.target.value,
+                }))
+              }
+              placeholder="Optional: add product insurance separately from installation. Fee is a percentage of Item Subtotal."
+            />
+          </label>
+        )}
 
         {preview && settings && (
           <div className="rounded-xl bg-[#F5F7FF] border border-[#273E8E]/20 p-4 text-sm">

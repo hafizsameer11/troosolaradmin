@@ -209,7 +209,7 @@ const OrderDetailModal = ({ isOpen, order, onClose }: OrderDetailModalProps) => 
       ? lineItems.reduce((sum, row) => sum + Number(row.subtotal ?? 0), 0)
       : 0;
 
-  const itemsSubtotalNum =
+  const itemsSubtotalRaw =
     data.items_subtotal != null
       ? Number(data.items_subtotal)
       : itemsFromLines > 0
@@ -219,7 +219,20 @@ const OrderDetailModal = ({ isOpen, order, onClose }: OrderDetailModalProps) => 
   const catalogItemsSubtotalNum =
     data.catalog_items_subtotal != null && Number(data.catalog_items_subtotal) > 0
       ? Number(data.catalog_items_subtotal)
-      : itemsSubtotalNum;
+      : itemsSubtotalRaw;
+
+  // Shop: snap reverse-VAT noise (e.g. ₦0.15) so Net Total matches checkout Item Subtotal.
+  const isShopOrder = String(data.order_type || "").toLowerCase() === "shop";
+  let itemsSubtotalNum = itemsSubtotalRaw;
+  if (
+    isShopOrder &&
+    catalogItemsSubtotalNum > 0 &&
+    (Math.abs(itemsSubtotalRaw - catalogItemsSubtotalNum) < 1 ||
+      (catalogItemsSubtotalNum > itemsSubtotalRaw &&
+        catalogItemsSubtotalNum - itemsSubtotalRaw < 1))
+  ) {
+    itemsSubtotalNum = catalogItemsSubtotalNum;
+  }
 
   let onlineCheckoutDiscountNum =
     data.online_checkout_discount_amount != null
@@ -230,6 +243,15 @@ const OrderDetailModal = ({ isOpen, order, onClose }: OrderDetailModalProps) => 
     catalogItemsSubtotalNum > itemsSubtotalNum + 0.005
   ) {
     onlineCheckoutDiscountNum = catalogItemsSubtotalNum - itemsSubtotalNum;
+  }
+  if (
+    isShopOrder &&
+    (onlineCheckoutDiscountNum < 1 ||
+      (catalogItemsSubtotalNum > 0 &&
+        Math.abs(itemsSubtotalNum - catalogItemsSubtotalNum) < 1))
+  ) {
+    onlineCheckoutDiscountNum = 0;
+    itemsSubtotalNum = catalogItemsSubtotalNum > 0 ? catalogItemsSubtotalNum : itemsSubtotalNum;
   }
 
   const firstLineDiscountPct = lineItems.find(
@@ -250,8 +272,12 @@ const OrderDetailModal = ({ isOpen, order, onClose }: OrderDetailModalProps) => 
   const serviceFeesTotal =
     deliveryFeeNum + installationNum + materialNum + inspectionNum;
   const totalAmountBeforeVatTax = itemsSubtotalNum + serviceFeesTotal;
-  const grandTotalNum =
+  const grandTotalRaw =
     data.total_price != null ? Number(data.total_price) : NaN;
+  const grandTotalNum =
+    isShopOrder && Number.isFinite(grandTotalRaw)
+      ? Math.round(grandTotalRaw)
+      : grandTotalRaw;
 
   const preferredInstallDate =
     data.installation_requested_date ||
@@ -535,12 +561,12 @@ const OrderDetailModal = ({ isOpen, order, onClose }: OrderDetailModalProps) => 
                   <span className="text-gray-900 capitalize font-medium">{paymentMethod}</span>
                 </div>
                 <div className="flex justify-between items-center py-2.5">
-                  <span className="text-gray-700">Sub-Total</span>
+                  <span className="text-gray-700">Item Subtotal</span>
                   <span className="font-semibold tabular-nums text-gray-900">
                     ₦{formatInvoiceAmount(catalogItemsSubtotalNum)}
                   </span>
                 </div>
-                {onlineCheckoutDiscountNum > 0 ? (
+                {onlineCheckoutDiscountNum >= 1 ? (
                   <div className="flex justify-between items-center py-2.5">
                     <span className="text-gray-700">
                       {outrightDiscountPct > 0
@@ -600,7 +626,9 @@ const OrderDetailModal = ({ isOpen, order, onClose }: OrderDetailModalProps) => 
                 </div>
                 <div className="flex justify-between items-center py-2.5">
                   <span className="text-gray-700">
-                    VAT ({vatPctNum}% of Total Amount)
+                    VAT (
+                    {vatPctNum}% of{" "}
+                    {isShopOrder ? "Item Subtotal" : "Total Amount"})
                   </span>
                   <span className="font-semibold tabular-nums text-gray-900">
                     +₦{formatInvoiceAmount(vatNum)}
@@ -611,7 +639,7 @@ const OrderDetailModal = ({ isOpen, order, onClose }: OrderDetailModalProps) => 
                     <span className="text-gray-700">
                       Insurance Fee (
                       {insurancePctNum > 0 ? `${insurancePctNum}%` : "—"} of
-                      Sub-Total)
+                      Item Subtotal)
                     </span>
                     <span className="font-semibold tabular-nums text-gray-900">
                       +₦{formatInvoiceAmount(insuranceNum)}

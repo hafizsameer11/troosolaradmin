@@ -19,6 +19,7 @@ export type CheckoutSettingsPayload = {
   installation_materials_cost?: number;
   installation_schedule_working_days?: number;
   installation_description?: string;
+  insurance_description?: string;
 };
 
 export const updateCheckoutSettings = async (

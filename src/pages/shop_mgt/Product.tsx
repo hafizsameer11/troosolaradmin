@@ -16,6 +16,51 @@ import { getAllCategories } from "../../utils/queries/categories";
 import { getAllBrands } from "../../utils/queries/brands";
 import { API_DOMAIN } from "../../../apiConfig";
 
+/** Match Solar Store bundle category ids / titles (admin categories 25 / 26). */
+const SOLAR_BUNDLES_CATEGORY_ID = "25";
+const INVERTER_BUNDLES_CATEGORY_ID = "26";
+
+const normalizeBundleTypeKey = (s: string | null | undefined) =>
+  String(s || "")
+    .toLowerCase()
+    .replace(/\s+/g, "");
+
+const isSolarInverterBatteryBundle = (b: { bundle_type?: string | null }) => {
+  const key = normalizeBundleTypeKey(b?.bundle_type);
+  return (
+    key === "solar+inverter+battery" ||
+    key === "solarinverterbattery" ||
+    /solar.*inverter.*battery/i.test(String(b?.bundle_type || ""))
+  );
+};
+
+const isInverterBatteryBundle = (b: { bundle_type?: string | null }) => {
+  if (isSolarInverterBatteryBundle(b)) return false;
+  const key = normalizeBundleTypeKey(b?.bundle_type);
+  return (
+    key === "inverter+battery" ||
+    key === "inverterbattery" ||
+    /inverter.*battery/i.test(String(b?.bundle_type || ""))
+  );
+};
+
+const isSolarBundlesCategory = (title: string, id?: string | number | null) => {
+  const idStr = id != null ? String(id) : "";
+  const label = String(title || "").toLowerCase();
+  return idStr === SOLAR_BUNDLES_CATEGORY_ID || /solar\s+bundle/i.test(label);
+};
+
+const isInverterBundlesCategory = (title: string, id?: string | number | null) => {
+  const idStr = id != null ? String(id) : "";
+  const label = String(title || "").toLowerCase();
+  return (
+    idStr === INVERTER_BUNDLES_CATEGORY_ID || /inverter\s+bundle/i.test(label)
+  );
+};
+
+const isBundleStoreCategory = (title: string, id?: string | number | null) =>
+  isSolarBundlesCategory(title, id) || isInverterBundlesCategory(title, id);
+
 // API Response Interfaces
 interface ApiProductDetail {
   id: number;
@@ -303,6 +348,19 @@ const Product = () => {
   const filteredProducts = useMemo(() => {
     let filtered = apiProducts;
 
+    // Bundle categories are not product categories — hide products there.
+    if (selectedCategory !== "Categories") {
+      const selectedCategoryData = apiCategories.find(
+        (cat) => cat.title === selectedCategory
+      );
+      if (
+        selectedCategoryData &&
+        isBundleStoreCategory(selectedCategoryData.title, selectedCategoryData.id)
+      ) {
+        return [];
+      }
+    }
+
     // Filter by search query
     if (searchQuery.trim()) {
       filtered = filtered.filter(product =>
@@ -341,15 +399,39 @@ const Product = () => {
     [apiBundles]
   );
 
-  // Bundles share search; hide when product-only filters (category/brand/stock) are active
+  const selectedCategoryMeta = useMemo(() => {
+    if (selectedCategory === "Categories") return null;
+    return apiCategories.find((cat) => cat.title === selectedCategory) || null;
+  }, [apiCategories, selectedCategory]);
+
+  const selectedIsBundleCategory = Boolean(
+    selectedCategoryMeta &&
+      isBundleStoreCategory(selectedCategoryMeta.title, selectedCategoryMeta.id)
+  );
+
+  // Bundles: show on All, or when a Solar/Inverter Bundles category is selected.
   const filteredBundles = useMemo(() => {
-    const productOnlyFilterActive =
-      selectedCategory !== "Categories" ||
-      !!selectedBrand ||
-      selectedAvailability === "Out of Stock";
-    if (productOnlyFilterActive) return [];
+    // Product-only filters hide bundles (except bundle store categories).
+    if (selectedAvailability === "Out of Stock") return [];
+    if (selectedCategory !== "Categories" && !selectedIsBundleCategory) {
+      return [];
+    }
+    // Brand filter is product-oriented; hide bundles when a brand is chosen
+    // unless we are on a bundle category (then keep type filter only).
+    if (selectedBrand && !selectedIsBundleCategory) return [];
 
     let filtered = validBundles;
+
+    if (selectedIsBundleCategory && selectedCategoryMeta) {
+      if (isSolarBundlesCategory(selectedCategoryMeta.title, selectedCategoryMeta.id)) {
+        filtered = filtered.filter((b) => isSolarInverterBatteryBundle(b));
+      } else if (
+        isInverterBundlesCategory(selectedCategoryMeta.title, selectedCategoryMeta.id)
+      ) {
+        filtered = filtered.filter((b) => isInverterBatteryBundle(b));
+      }
+    }
+
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter((b) =>
@@ -363,13 +445,15 @@ const Product = () => {
     selectedCategory,
     selectedBrand,
     selectedAvailability,
+    selectedIsBundleCategory,
+    selectedCategoryMeta,
   ]);
 
   type CatalogItem =
     | { kind: "product"; product: ApiProduct }
     | { kind: "bundle"; bundle: ApiBundle };
 
-  // Interleave products + bundles (same idea as Solar Store “All”)
+  // Interleave on All; bundle categories → bundles only; product categories → products only
   const catalogItems = useMemo(() => {
     const products: CatalogItem[] = filteredProducts.map((product) => ({
       kind: "product",
@@ -379,6 +463,14 @@ const Product = () => {
       kind: "bundle",
       bundle,
     }));
+
+    if (selectedIsBundleCategory) {
+      return bundles;
+    }
+    if (selectedCategory !== "Categories") {
+      return products;
+    }
+
     const mixed: CatalogItem[] = [];
     const maxLen = Math.max(products.length, bundles.length);
     for (let i = 0; i < maxLen; i += 1) {
@@ -386,7 +478,12 @@ const Product = () => {
       if (i < bundles.length) mixed.push(bundles[i]);
     }
     return mixed;
-  }, [filteredProducts, filteredBundles]);
+  }, [
+    filteredProducts,
+    filteredBundles,
+    selectedCategory,
+    selectedIsBundleCategory,
+  ]);
 
   const paginatedCatalog = useMemo(() => {
     const start = (catalogPage - 1) * itemsPerPage;
@@ -955,7 +1052,9 @@ const Product = () => {
                     selectedCategory !== "Categories" ||
                     selectedBrand ||
                     selectedAvailability !== "Availability"
-                      ? "No items found matching your filters"
+                      ? selectedIsBundleCategory
+                        ? "No bundles found in this category"
+                        : "No items found matching your filters"
                       : "No products or bundles available"}
                   </p>
                   {(searchQuery ||
