@@ -276,7 +276,7 @@ const OrderDetailModal = ({ isOpen, order, onClose }: OrderDetailModalProps) => 
     data.total_price != null ? Number(data.total_price) : NaN;
   const grandTotalNum =
     isShopOrder && Number.isFinite(grandTotalRaw)
-      ? Math.round(grandTotalRaw)
+      ? Math.round(grandTotalRaw * 100) / 100
       : grandTotalRaw;
 
   const preferredInstallDate =
