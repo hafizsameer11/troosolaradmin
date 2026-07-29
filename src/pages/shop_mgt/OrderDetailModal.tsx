@@ -626,9 +626,7 @@ const OrderDetailModal = ({ isOpen, order, onClose }: OrderDetailModalProps) => 
                 </div>
                 <div className="flex justify-between items-center py-2.5">
                   <span className="text-gray-700">
-                    VAT (
-                    {vatPctNum}% of{" "}
-                    {isShopOrder ? "Item Subtotal" : "Total Amount"})
+                    VAT ({vatPctNum}% of Total Amount)
                   </span>
                   <span className="font-semibold tabular-nums text-gray-900">
                     +₦{formatInvoiceAmount(vatNum)}

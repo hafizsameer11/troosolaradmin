@@ -157,8 +157,8 @@ const CheckoutShopSettings = () => {
             Configure <strong>Solar Shop / add-to-cart</strong> checkout fees.
             These are separate from Buy Now. Every catalog category from Shop Mgt
             → Categories appears below — set delivery, installation, materials, and
-            inspection per category. Cart checkout sums fees from each product&apos;s
-            category.
+            inspection per category. Cart checkout sums fees from each product or
+            bundle category.
           </>
         ) : (
           <>
@@ -332,8 +332,8 @@ const CheckoutShopSettings = () => {
                   Fees by product category
                 </p>
                 <p className="text-xs text-gray-600 mt-1">
-                  One row per Shop category (linked to product.category). Cart
-                  checkout uses these amounts for products in that category.
+                  One row per Shop category. Cart checkout uses these amounts for
+                  products and bundles in that category.
                   Categories with no fee set fall back to the defaults above
                   where applicable.
                 </p>
