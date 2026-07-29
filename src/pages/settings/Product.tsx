@@ -16,7 +16,7 @@ import { useMutation } from "@tanstack/react-query";
 
 import { getAllBrands } from "../../utils/queries/brands";
 
-import { deleteBrand } from "../../utils/mutations/brands";
+import { deleteBrand, reorderBrands } from "../../utils/mutations/brands";
 
 
 
@@ -61,8 +61,9 @@ const Product = () => {
   const [editBrandModalOpen, setEditBrandModalOpen] = useState(false);
   const [editBrandData, setEditBrandData] = useState<Brand | null>(null);
 
-  // Drag-and-drop state for categories
+  // Drag-and-drop state for categories / brands
   const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
+  const [draggedBrandId, setDraggedBrandId] = useState<string | null>(null);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -272,6 +273,43 @@ const Product = () => {
     setDraggedCategoryId(null);
   };
 
+  const handleBrandDragStart = (id: string) => {
+    setDraggedBrandId(id);
+  };
+
+  const handleBrandDragOver = (event: React.DragEvent<HTMLTableRowElement>) => {
+    event.preventDefault();
+  };
+
+  const handleBrandDrop = (targetId: string) => {
+    if (!draggedBrandId || draggedBrandId === targetId) return;
+    setBrandList((prev) => {
+      const current = [...prev];
+      const fromIndex = current.findIndex((b) => b.id === draggedBrandId);
+      const toIndex = current.findIndex((b) => b.id === targetId);
+      if (fromIndex === -1 || toIndex === -1) return prev;
+      const [moved] = current.splice(fromIndex, 1);
+      current.splice(toIndex, 0, moved);
+      const reindexed = current.map((b, idx) => ({
+        ...b,
+        sortOrder: idx + 1,
+      }));
+
+      if (token) {
+        const payload = reindexed.map((b) => ({
+          id: Number(b.id),
+          sort_order: b.sortOrder ?? 0,
+        }));
+        reorderBrands(token, payload).catch(() => {
+          // ignore; admin can refresh if save fails
+        });
+      }
+
+      return reindexed;
+    });
+    setDraggedBrandId(null);
+  };
+
   const handleSelectBrand = (id: string) => {
     setBrandList((prev) =>
       prev.map((brand) =>
@@ -297,7 +335,7 @@ const Product = () => {
   useEffect(() => {
     if (apiBrands && (apiBrands as any)?.status === "success" && Array.isArray((apiBrands as any).data)) {
       setBrandList(
-        (apiBrands as any).data.map((b: any) => ({
+        (apiBrands as any).data.map((b: any, index: number) => ({
           id: String(b.id),
           brandName: b.title,
           category: b.category_id ? String(b.category_id) : "",
@@ -321,6 +359,7 @@ const Product = () => {
             : "",
           status: "Active", // API doesn't provide status, default to Active
           isSelected: false,
+          sortOrder: typeof b.sort_order === "number" ? b.sort_order : index + 1,
         }))
       );
     }
@@ -853,8 +892,12 @@ const Product = () => {
                   return (
                   <tr
                     key={brand.id}
+                    draggable
+                    onDragStart={() => handleBrandDragStart(brand.id)}
+                    onDragOver={handleBrandDragOver}
+                    onDrop={() => handleBrandDrop(brand.id)}
                     className={`${index % 2 === 0 ? "bg-[#F8F8F8]" : "bg-white"
-                      } transition-colors border-b border-gray-100 last:border-b-0 px-6 py-4 `}
+                      } transition-colors border-b border-gray-100 last:border-b-0 px-6 py-4 cursor-move`}
                   >
                     {/* Checkbox */}
                     <td className="px-6 py-4 text-center">

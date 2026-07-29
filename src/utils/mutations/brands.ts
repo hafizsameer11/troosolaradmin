@@ -1,5 +1,24 @@
 import { apiCall } from "../customApiCall";
-import { API_ENDPOINTS } from "../../../apiConfig";
+import { API_ENDPOINTS, API_DOMAIN } from "../../../apiConfig";
+import axios from "axios";
+
+export const reorderBrands = async (
+  token: string,
+  orders: { id: number; sort_order: number }[]
+) => {
+  const url = `${API_DOMAIN}/brands/reorder`;
+  const response = await axios.post(
+    url,
+    { orders },
+    {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+  return response.data;
+};
 
 const appendCategoryIds = (formData: FormData, categoryIds: Array<string | number>) => {
   categoryIds.forEach((id) => {

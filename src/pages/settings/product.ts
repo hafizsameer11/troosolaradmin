@@ -16,6 +16,7 @@ export interface Brand {
   dateCreated: string;
   status: 'Active' | 'Pending';
   isSelected?: boolean;
+  sortOrder?: number;
 }
 
 export const productCategories: ProductCategory[] = [
