@@ -155,10 +155,11 @@ const CheckoutShopSettings = () => {
         {channel === "shop" ? (
           <>
             Configure <strong>Solar Shop / add-to-cart</strong> checkout fees.
-            These are separate from Buy Now. Every catalog category from Shop Mgt
-            → Categories appears below — set delivery, installation, materials, and
-            inspection per category. Cart checkout sums fees from each product or
-            bundle category.
+            Delivery uses product-type rules: solar panels are tiered by quantity
+            (1–14, 15–28, 29–42 units, etc.), battery and streetlight fees are
+            separate, inverter delivery is waived when ordered with panels or
+            battery, and all-in-one delivery is free with panels. Inspection is
+            one flat fee for the whole cart (not per category).
           </>
         ) : (
           <>
@@ -332,10 +333,9 @@ const CheckoutShopSettings = () => {
                   Fees by product category
                 </p>
                 <p className="text-xs text-gray-600 mt-1">
-                  One row per Shop category. Cart checkout uses these amounts for
-                  products and bundles in that category.
-                  Categories with no fee set fall back to the defaults above
-                  where applicable.
+                  Set delivery per Shop category. Cart checkout applies Solar Shop
+                  delivery rules (panel tiers, inverter waiver, etc.) using these
+                  amounts as the base fee for each product type.
                 </p>
               </div>
 
@@ -419,8 +419,12 @@ const CheckoutShopSettings = () => {
                     </label>
                     <label className="block">
                       <span className="text-xs font-medium text-gray-700">
-                        Inspection fee (₦)
+                        Inspection fee (₦) — flat for all orders
                       </span>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        One amount applies to the whole cart. Set it on any
+                        category row; checkout uses a single flat inspection fee.
+                      </p>
                       <input
                         type="number"
                         min={0}
