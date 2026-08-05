@@ -16,8 +16,6 @@ type Props = {
   allowAdd?: boolean;
 };
 
-const emptyTier = (): QuantityFeeTier => ({ min: 1, max: null, amount: 0 });
-
 export const ShopQuantityTierEditor: React.FC<Props> = ({
   title,
   description,
@@ -193,10 +191,13 @@ export const defaultShopTierMap = (): ShopQuantityFeeTierMap => ({
     { min: 15, max: 24, amount: 0 },
     { min: 25, max: null, amount: 0 },
   ],
-  panel_installation: Array.from({ length: 16 }, (_, i) => {
-    const start = i * 2 + 1;
-    return { min: start, max: start + 1, amount: 0 };
-  }).concat([{ min: 33, max: null, amount: 0 }]),
+  panel_installation: [
+    ...Array.from({ length: 16 }, (_, i): QuantityFeeTier => {
+      const start = i * 2 + 1;
+      return { min: start, max: start + 1, amount: 0 };
+    }),
+    { min: 33, max: null, amount: 0 },
+  ],
   inverter_installation: [
     { min: 1, max: 1, amount: 0 },
     { min: 2, max: 2, amount: 0 },
