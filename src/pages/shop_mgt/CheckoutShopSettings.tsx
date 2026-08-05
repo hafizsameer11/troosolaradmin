@@ -10,6 +10,12 @@ import {
   type CheckoutSettingsPayload,
 } from "../../utils/mutations/checkoutSettings";
 import LoadingSpinner from "../../components/common/LoadingSpinner";
+import {
+  ShopQuantityTierEditor,
+  SHOP_TIER_SECTIONS,
+  mergeShopTierMap,
+  type ShopQuantityFeeTierMap,
+} from "../../components/shop/ShopQuantityTierEditor";
 
 const PRODUCT_ONLY_KEYS = ["battery-only", "inverter-only", "panels-only"];
 
@@ -48,6 +54,9 @@ const CheckoutShopSettings = () => {
         settings.installation_schedule_working_days,
       installation_description: settings.installation_description ?? "",
       insurance_description: settings.insurance_description ?? "",
+      shop_quantity_fee_tiers: mergeShopTierMap(
+        settings.shop_quantity_fee_tiers as ShopQuantityFeeTierMap | undefined
+      ),
     });
   }, [settings, channel]);
 
@@ -73,6 +82,24 @@ const CheckoutShopSettings = () => {
     e.preventDefault();
     mutation.mutate({ ...form, channel });
   };
+
+  const updateShopTier = (key: string, tiers: ShopQuantityFeeTierMap[string]) => {
+    setForm((f) => ({
+      ...f,
+      shop_quantity_fee_tiers: {
+        ...(f.shop_quantity_fee_tiers as ShopQuantityFeeTierMap | undefined) ||
+          mergeShopTierMap(
+            settings?.shop_quantity_fee_tiers as ShopQuantityFeeTierMap | undefined
+          ),
+        [key]: tiers,
+      },
+    }));
+  };
+
+  const shopTierMap = mergeShopTierMap(
+    (form.shop_quantity_fee_tiers as ShopQuantityFeeTierMap | undefined) ||
+      (settings?.shop_quantity_fee_tiers as ShopQuantityFeeTierMap | undefined)
+  );
 
   const updateCategoryFee = (
     mapKey:
@@ -155,11 +182,9 @@ const CheckoutShopSettings = () => {
         {channel === "shop" ? (
           <>
             Configure <strong>Solar Shop / add-to-cart</strong> checkout fees.
-            Delivery uses product-type rules: solar panels are tiered by quantity
-            (1–14, 15–28, 29–42 units, etc.), battery and streetlight fees are
-            separate, inverter delivery is waived when ordered with panels or
-            battery, and all-in-one delivery is free with panels. Inspection is
-            one flat fee for the whole cart (not per category).
+            Set delivery and installation by quantity tiers below. Bundles use
+            the panel, inverter, and battery counts inside the bundle. Inspection
+            remains one flat fee for the whole cart.
           </>
         ) : (
           <>
@@ -326,16 +351,38 @@ const CheckoutShopSettings = () => {
           </>
         ) : (
           <>
-            {/* Solar Shop cart only — per-category delivery + other fees together */}
+            <div className="rounded-xl border border-[#273E8E]/15 bg-[#F5F7FF] p-4 space-y-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">
+                  Delivery & installation by quantity
+                </p>
+                <p className="text-xs text-gray-600 mt-1">
+                  Edit the quantity range and amount for each tier. Cart checkout
+                  picks the matching tier for total panels, inverters, and
+                  batteries (including inside solar and inverter bundles).
+                  Installation fees add panel + inverter + battery amounts.
+                </p>
+              </div>
+              {SHOP_TIER_SECTIONS.map((section) => (
+                <ShopQuantityTierEditor
+                  key={section.key}
+                  title={section.title}
+                  description={section.description}
+                  tiers={shopTierMap[section.key] || []}
+                  onChange={(tiers) => updateShopTier(section.key, tiers)}
+                />
+              ))}
+            </div>
+
             <div className="rounded-xl border border-[#273E8E]/15 bg-white p-4 space-y-4">
               <div>
                 <p className="text-sm font-semibold text-gray-900">
-                  Fees by product category
+                  Other fees by category
                 </p>
                 <p className="text-xs text-gray-600 mt-1">
-                  Set delivery per Shop category. Cart checkout applies Solar Shop
-                  delivery rules (panel tiers, inverter waiver, etc.) using these
-                  amounts as the base fee for each product type.
+                  Materials and flat inspection for accessories and other catalog
+                  categories. Delivery for non-panel/inverter/battery items uses
+                  the per-category delivery fee below.
                 </p>
               </div>
 
@@ -353,7 +400,7 @@ const CheckoutShopSettings = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className="block">
                       <span className="text-xs font-medium text-gray-700">
-                        Delivery fee (₦)
+                        Delivery fee (₦) — other products only
                       </span>
                       <input
                         type="number"
@@ -367,28 +414,6 @@ const CheckoutShopSettings = () => {
                         onChange={(e) =>
                           updateCategoryFee(
                             "category_delivery_fees",
-                            cat.key,
-                            Number(e.target.value)
-                          )
-                        }
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="text-xs font-medium text-gray-700">
-                        Installation fee (₦)
-                      </span>
-                      <input
-                        type="number"
-                        min={0}
-                        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                        value={
-                          form.category_installation_fees?.[cat.key] ??
-                          settings.category_installation_fees?.[cat.key] ??
-                          ""
-                        }
-                        onChange={(e) =>
-                          updateCategoryFee(
-                            "category_installation_fees",
                             cat.key,
                             Number(e.target.value)
                           )
@@ -417,7 +442,7 @@ const CheckoutShopSettings = () => {
                         }
                       />
                     </label>
-                    <label className="block">
+                    <label className="block sm:col-span-2">
                       <span className="text-xs font-medium text-gray-700">
                         Inspection fee (₦) — flat for all orders
                       </span>

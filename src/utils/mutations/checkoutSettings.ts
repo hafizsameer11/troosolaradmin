@@ -20,6 +20,10 @@ export type CheckoutSettingsPayload = {
   installation_schedule_working_days?: number;
   installation_description?: string;
   insurance_description?: string;
+  shop_quantity_fee_tiers?: Record<
+    string,
+    Array<{ min: number; max: number | null; amount: number }>
+  >;
 };
 
 export const updateCheckoutSettings = async (
