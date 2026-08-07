@@ -8,12 +8,28 @@ export type QuantityFeeTier = {
 
 type ShopQuantityFeeTierMap = Record<string, QuantityFeeTier[]>;
 
+export type ShopTierSection = {
+  key: string;
+  title: string;
+  description: string;
+  kind?: string;
+  category_id?: number;
+};
+
 type Props = {
   title: string;
   description?: string;
   tiers: QuantityFeeTier[];
   onChange: (tiers: QuantityFeeTier[]) => void;
   allowAdd?: boolean;
+};
+
+const moveTier = (tiers: QuantityFeeTier[], index: number, direction: -1 | 1) => {
+  const target = index + direction;
+  if (target < 0 || target >= tiers.length) return tiers;
+  const next = [...tiers];
+  [next[index], next[target]] = [next[target], next[index]];
+  return next;
 };
 
 export const ShopQuantityTierEditor: React.FC<Props> = ({
@@ -35,11 +51,31 @@ export const ShopQuantityTierEditor: React.FC<Props> = ({
   };
 
   const addTier = () => {
-    const last = tiers[tiers.length - 1];
-    const nextMin = last
-      ? (last.max != null && last.max > 0 ? last.max + 1 : last.min + 1)
+    const openIdx = tiers.findIndex((tier) => tier.max == null);
+    if (openIdx < 0) {
+      const last = tiers[tiers.length - 1];
+      const nextMin = last
+        ? (last.max != null && last.max > 0 ? last.max + 1 : last.min + 1)
+        : 1;
+      onChange([...tiers, { min: nextMin, max: null, amount: 0 }]);
+      return;
+    }
+
+    const openTier = tiers[openIdx];
+    const prev = openIdx > 0 ? tiers[openIdx - 1] : null;
+    const newMin = prev
+      ? (prev.max != null && prev.max > 0 ? prev.max + 1 : prev.min + 1)
       : 1;
-    onChange([...tiers, { min: nextMin, max: null, amount: 0 }]);
+    const newMax =
+      openTier.min > newMin ? openTier.min - 1 : newMin;
+    const newTier: QuantityFeeTier = {
+      min: newMin,
+      max: newMax >= newMin ? newMax : newMin,
+      amount: 0,
+    };
+    const next = [...tiers];
+    next.splice(openIdx, 0, newTier);
+    onChange(next);
   };
 
   return (
@@ -55,8 +91,30 @@ export const ShopQuantityTierEditor: React.FC<Props> = ({
         {tiers.map((tier, index) => (
           <div
             key={`${title}-${index}`}
-            className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end"
+            className="grid grid-cols-1 sm:grid-cols-[auto_1fr_1fr_1fr_auto] gap-2 items-end"
           >
+            {allowAdd ? (
+              <div className="flex flex-col gap-1 pb-1">
+                <button
+                  type="button"
+                  disabled={index === 0}
+                  onClick={() => onChange(moveTier(tiers, index, -1))}
+                  className="text-xs text-gray-600 hover:text-[#273E8E] disabled:opacity-30"
+                  title="Move up"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  disabled={index === tiers.length - 1}
+                  onClick={() => onChange(moveTier(tiers, index, 1))}
+                  className="text-xs text-gray-600 hover:text-[#273E8E] disabled:opacity-30"
+                  title="Move down"
+                >
+                  ↓
+                </button>
+              </div>
+            ) : null}
             <label className="block">
               <span className="text-xs font-medium text-gray-700">From (qty)</span>
               <input
@@ -120,18 +178,14 @@ export const ShopQuantityTierEditor: React.FC<Props> = ({
           onClick={addTier}
           className="text-xs font-medium text-[#273E8E] hover:underline"
         >
-          + Add tier
+          + Add tier (inserts before “and above” row)
         </button>
       ) : null}
     </div>
   );
 };
 
-export const SHOP_TIER_SECTIONS: {
-  key: string;
-  title: string;
-  description: string;
-}[] = [
+export const SHOP_TIER_SECTIONS: ShopTierSection[] = [
   {
     key: "panel_delivery",
     title: "Solar panel delivery fees",
@@ -155,6 +209,12 @@ export const SHOP_TIER_SECTIONS: {
     title: "Solar panel installation fees",
     description:
       "By total panel count. Use even ranges (e.g. 1–2, 3–4, 5–6). Add more rows as needed.",
+  },
+  {
+    key: "streetlight_installation",
+    title: "Solar streetlight installation fees",
+    description:
+      "By streetlight unit count. Delivery still uses solar panel delivery tiers.",
   },
   {
     key: "inverter_installation",
@@ -198,6 +258,12 @@ export const defaultShopTierMap = (): ShopQuantityFeeTierMap => ({
     }),
     { min: 33, max: null, amount: 0 },
   ],
+  streetlight_installation: [
+    { min: 1, max: 1, amount: 0 },
+    { min: 2, max: 2, amount: 0 },
+    { min: 3, max: 3, amount: 0 },
+    { min: 4, max: null, amount: 0 },
+  ],
   inverter_installation: [
     { min: 1, max: 1, amount: 0 },
     { min: 2, max: 2, amount: 0 },
@@ -213,12 +279,26 @@ export const defaultShopTierMap = (): ShopQuantityFeeTierMap => ({
 });
 
 export const mergeShopTierMap = (
-  incoming?: ShopQuantityFeeTierMap | null
+  incoming?: ShopQuantityFeeTierMap | null,
+  sections?: ShopTierSection[] | null
 ): ShopQuantityFeeTierMap => {
   const defaults = defaultShopTierMap();
-  if (!incoming) return defaults;
+  const sectionKeys = (sections?.length ? sections : SHOP_TIER_SECTIONS).map(
+    (s) => s.key
+  );
   const out: ShopQuantityFeeTierMap = { ...defaults };
-  for (const key of Object.keys(defaults)) {
+
+  for (const key of sectionKeys) {
+    if (!out[key]) {
+      out[key] = key.endsWith("_installation")
+        ? defaults.inverter_installation
+        : defaults.panel_delivery;
+    }
+  }
+
+  if (!incoming) return out;
+
+  for (const key of Object.keys({ ...out, ...incoming })) {
     if (Array.isArray(incoming[key]) && incoming[key].length > 0) {
       out[key] = incoming[key].map((t) => ({
         min: Number(t.min) || 1,
@@ -227,5 +307,6 @@ export const mergeShopTierMap = (
       }));
     }
   }
+
   return out;
 };

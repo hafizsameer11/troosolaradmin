@@ -15,6 +15,7 @@ import {
   SHOP_TIER_SECTIONS,
   mergeShopTierMap,
   type ShopQuantityFeeTierMap,
+  type ShopTierSection,
 } from "../../components/shop/ShopQuantityTierEditor";
 
 const PRODUCT_ONLY_KEYS = ["battery-only", "inverter-only", "panels-only"];
@@ -55,7 +56,9 @@ const CheckoutShopSettings = () => {
       installation_description: settings.installation_description ?? "",
       insurance_description: settings.insurance_description ?? "",
       shop_quantity_fee_tiers: mergeShopTierMap(
-        settings.shop_quantity_fee_tiers as ShopQuantityFeeTierMap | undefined
+        settings.shop_quantity_fee_tiers as ShopQuantityFeeTierMap | undefined,
+        (settings.shop_tier_sections as ShopTierSection[] | undefined) ||
+          SHOP_TIER_SECTIONS
       ),
     });
   }, [settings, channel]);
@@ -96,9 +99,16 @@ const CheckoutShopSettings = () => {
     }));
   };
 
+  const shopTierSections = (
+    (settings?.shop_tier_sections as ShopTierSection[] | undefined)?.length
+      ? (settings.shop_tier_sections as ShopTierSection[])
+      : SHOP_TIER_SECTIONS
+  );
+
   const shopTierMap = mergeShopTierMap(
     (form.shop_quantity_fee_tiers as ShopQuantityFeeTierMap | undefined) ||
-      (settings?.shop_quantity_fee_tiers as ShopQuantityFeeTierMap | undefined)
+      (settings?.shop_quantity_fee_tiers as ShopQuantityFeeTierMap | undefined),
+    shopTierSections
   );
 
   const updateCategoryFee = (
@@ -363,7 +373,7 @@ const CheckoutShopSettings = () => {
                   Installation fees add panel + inverter + battery amounts.
                 </p>
               </div>
-              {SHOP_TIER_SECTIONS.map((section) => (
+              {shopTierSections.map((section) => (
                 <ShopQuantityTierEditor
                   key={section.key}
                   title={section.title}
