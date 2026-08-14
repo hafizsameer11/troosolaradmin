@@ -3,7 +3,7 @@ export interface ProductCategory {
   categoryName: string;
   image: string;
   dateCreated: string;
-  status: 'Active' | 'Pending';
+  status: 'Active' | 'Hidden';
   isSelected?: boolean;
 }
 
@@ -33,7 +33,7 @@ export const productCategories: ProductCategory[] = [
     categoryName: 'Inverter',
     image: '/assets/images/category.png', // Replace with your actual inverter image path
     dateCreated: '05-07-25/07:22AM',
-    status: 'Pending',
+    status: 'Hidden',
     isSelected: false
   },
   {
@@ -41,7 +41,7 @@ export const productCategories: ProductCategory[] = [
     categoryName: 'Batteries',
     image: '/assets/images/category.png', // Replace with your actual batteries image path
     dateCreated: '05-07-25/07:22AM',
-    status: 'Pending',
+    status: 'Hidden',
     isSelected: false
   }
 ];

@@ -28,6 +28,7 @@ interface ApiCategory {
   icon?: string | null;
   created_at?: string;
   sort_order?: number | null;
+  show_on_store?: boolean;
 }
 
 interface ApiListResponse<T> {
@@ -178,7 +179,7 @@ const Product = () => {
               .replace(/\//g, "-")
               .replace(",", "/")
           : "",
-        status: "Active" as ProductCategory["status"],
+        status: (cat.show_on_store === false ? "Hidden" : "Active") as ProductCategory["status"],
         isSelected: false,
         // Preserve backend sort_order when present, otherwise fall back to index.
         sortOrder: typeof cat.sort_order === "number" ? cat.sort_order : index + 1,
@@ -218,10 +219,11 @@ const Product = () => {
           })
           .replace(/\//g, "-")
           .replace(",", "/"),
-        status: status as "Active" | "Pending",
+        status: status as "Active" | "Hidden",
         isSelected: false,
       };
       setCategories((prev) => [...prev, newCategory]);
+      refetch();
     }
   };
 
@@ -717,9 +719,9 @@ const Product = () => {
                     {/* Status */}
                     <td className="px-6 py-4 text-center">
                       <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${category.status === "Active"
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${                        category.status === "Active"
                           ? "bg-green-100 text-green-800"
-                          : "bg-yellow-100 text-yellow-800"
+                          : "bg-gray-100 text-gray-700"
                           }`}
                       >
                         {category.status}

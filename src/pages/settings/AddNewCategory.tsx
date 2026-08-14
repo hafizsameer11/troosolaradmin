@@ -43,7 +43,7 @@ const AddNewCategory = ({
     } else {
       setCategoryName("");
       setSelectedImage(null);
-      setStatus("");
+      setStatus("Active");
       setImagePreview(null);
       console.log("🔍 Modal opened in add mode → state reset");
     }
@@ -102,7 +102,7 @@ const AddNewCategory = ({
           });
 
           await addCategory(
-            { title: categoryName, icon: selectedImage },
+            { title: categoryName, icon: selectedImage, status },
             token || ""
           );
         }
@@ -278,17 +278,21 @@ const AddNewCategory = ({
           {/* Status */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Status
+              Solar Store visibility
             </label>
+            <p className="text-xs text-gray-500 mb-2">
+              Hidden categories and their products/bundles are not shown on Solar Store.
+              Buy Solar Bundles is unchanged.
+            </p>
             <div className="relative">
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#273E8E] focus:border-[#273E8E] outline-none appearance-none bg-white text-gray-500"
               >
-                <option value="">Update Status</option>
-                <option value="Active">Active</option>
-                <option value="Pending">Pending</option>
+                <option value="">Select visibility</option>
+                <option value="Active">Active — show on Solar Store</option>
+                <option value="Hidden">Hidden — hide from Solar Store</option>
               </select>
               <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                 <svg

@@ -24,17 +24,27 @@ import { apiCall } from "../customApiCall";
 // Helper to create FormData from payload
 const buildCategoryFormData = (payload: {
   title: string;
-  icon: File | Blob;
+  icon?: File | Blob | null;
+  status?: string;
+  show_on_store?: boolean;
 }) => {
   const formData = new FormData();
   formData.append("title", payload.title);
-  formData.append("icon", payload.icon);
+  if (payload.icon) {
+    formData.append("icon", payload.icon);
+  }
+  if (payload.status) {
+    formData.append("status", payload.status);
+  }
+  if (payload.show_on_store !== undefined) {
+    formData.append("show_on_store", payload.show_on_store ? "1" : "0");
+  }
   return formData;
 };
 
 // POST / New Category
 export const addCategory = async (
-  payload: { title: string; icon: File | Blob },
+  payload: { title: string; icon: File | Blob; status?: string },
   token: string
 ): Promise<any> => {
   const formData = buildCategoryFormData(payload);
@@ -49,7 +59,7 @@ export const addCategory = async (
 // POST /update_category/{id}
 export const updateCategory = async (
   id: number | string,
-  payload: { title: string; icon: File | Blob },
+  payload: { title: string; icon?: File | Blob | null; status?: string },
   token: string
 ): Promise<any> => {
   const formData = buildCategoryFormData(payload);
