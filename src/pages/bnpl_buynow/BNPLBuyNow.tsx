@@ -182,6 +182,14 @@ function labelProductCategory(value: unknown): string {
   return String(value).replace(/-/g, " ");
 }
 
+/** BNPL commercial skips the solution picker — hide inherited Buy Now full-kit. */
+function auditShowsSolution(item: { source?: unknown; audit_type?: unknown; product_category?: unknown }): boolean {
+  const source = String(item?.source || "").toLowerCase();
+  const auditType = String(item?.audit_type || "").toLowerCase();
+  if (source === "bnpl" && auditType === "commercial") return false;
+  return Boolean(labelProductCategory(item?.product_category));
+}
+
 /**
  * Gated estate: Yes only if they chose “in a gated estate”; otherwise N/A (not gated or unknown).
  * API often sends 0/1 instead of booleans.
@@ -2981,7 +2989,9 @@ const BNPLBuyNow: React.FC = () => {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                 <span className="capitalize">
-                                  {item.audit_type?.replace("-", "/") || "N/A"}
+                                  {item.audit_type === "commercial"
+                                    ? "Commercial / Industrial"
+                                    : item.audit_type?.replace("-", "/") || "N/A"}
                                 </span>
                                 {item.audit_type === "commercial" && !item.property_address && (
                                   <span className="ml-2 text-xs text-orange-600 font-semibold">
@@ -5143,7 +5153,9 @@ const BNPLBuyNow: React.FC = () => {
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Audit Type</p>
                             <p className="text-sm font-semibold text-gray-900 capitalize">
-                              {selectedItem.audit_type === "home-office" && selectedItem.audit_subtype
+                              {selectedItem.audit_type === "commercial"
+                                ? "Commercial / Industrial"
+                                : selectedItem.audit_type === "home-office" && selectedItem.audit_subtype
                                 ? selectedItem.audit_subtype === "office"
                                   ? "Home–Office (Office)"
                                   : "Home–Office (Home)"
@@ -5159,7 +5171,7 @@ const BNPLBuyNow: React.FC = () => {
                             </p>
                           </div>
                         )}
-                        {selectedItem.customer_type && (
+                        {selectedItem.customer_type && selectedItem.audit_type !== "commercial" && (
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Customer Type</p>
                             <p className="text-sm font-semibold text-gray-900 capitalize">
@@ -5167,7 +5179,7 @@ const BNPLBuyNow: React.FC = () => {
                             </p>
                           </div>
                         )}
-                        {selectedItem.product_category && (
+                        {auditShowsSolution(selectedItem) && (
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Solution</p>
                             <p className="text-sm font-semibold text-gray-900">
@@ -7918,8 +7930,12 @@ const BNPLBuyNow: React.FC = () => {
                         </h3>
                         <p className="text-xs text-gray-500 mt-1">
                           {audit.type_label || audit.audit_type}
-                          {audit.customer_type ? ` · ${audit.customer_type}` : ""}
-                          {audit.product_category ? ` · ${audit.product_category}` : ""}
+                          {audit.customer_type && audit.audit_type !== "commercial"
+                            ? ` · ${audit.customer_type}`
+                            : ""}
+                          {auditShowsSolution(audit)
+                            ? ` · ${labelProductCategory(audit.product_category)}`
+                            : ""}
                         </p>
                       </div>
                       <span
