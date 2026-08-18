@@ -1663,6 +1663,13 @@ const BNPLBuyNow: React.FC = () => {
     { value: "17:00", label: "5:00 PM" },
   ];
 
+  const customerPaymentTimeOptions = Array.from({ length: 24 }, (_, hour) => {
+    const value = `${String(hour).padStart(2, "0")}:00`;
+    const suffix = hour >= 12 ? "PM" : "AM";
+    const hour12 = hour % 12 || 12;
+    return { value, label: `${hour12}:00 ${suffix}` };
+  });
+
   const formatAuditPreferredSchedule = (item: {
     preferred_audit_date?: string | null;
     preferred_audit_time?: string | null;
@@ -6343,7 +6350,7 @@ const BNPLBuyNow: React.FC = () => {
                             }
                           >
                             <option value="">Select time</option>
-                            {auditVisitTimeOptions.map((slot) => (
+                            {customerPaymentTimeOptions.map((slot) => (
                               <option key={slot.value} value={slot.value}>
                                 {slot.label}
                               </option>
