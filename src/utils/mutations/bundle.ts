@@ -30,6 +30,7 @@ type BundleProductPayload = {
   total_price?: number;
   discount_price?: number;
   bnpl_price?: number | null;
+  bnpl_discount_price?: number | null;
   discount_end_date?: string;
   featured_image?: File;
   items?: number[];
@@ -89,6 +90,11 @@ export const addBundle = async (
     formData.append("bnpl_price", data.bnpl_price.toString());
   } else if (data.bnpl_price === null) {
     formData.append("bnpl_price", "");
+  }
+  if (data.bnpl_discount_price !== undefined && data.bnpl_discount_price !== null) {
+    formData.append("bnpl_discount_price", data.bnpl_discount_price.toString());
+  } else if (data.bnpl_discount_price === null) {
+    formData.append("bnpl_discount_price", "");
   }
   if (data.discount_end_date) {
     formData.append("discount_end_date", data.discount_end_date);
@@ -185,6 +191,11 @@ export const updateBundle = async (
     formData.append("bnpl_price", data.bnpl_price.toString());
   } else if (data.bnpl_price === null) {
     formData.append("bnpl_price", "");
+  }
+  if (data.bnpl_discount_price !== undefined && data.bnpl_discount_price !== null) {
+    formData.append("bnpl_discount_price", data.bnpl_discount_price.toString());
+  } else if (data.bnpl_discount_price === null) {
+    formData.append("bnpl_discount_price", "");
   }
   if (data.discount_end_date) {
     formData.append("discount_end_date", data.discount_end_date);
