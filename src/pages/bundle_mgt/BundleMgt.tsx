@@ -593,6 +593,7 @@ const BundleMgt = () => {
       brand_id: "",
       total_price: "",
       discount_price: "",
+      bnpl_price: "",
       inver_rating: "",
       total_output: "",
       total_load: "",
