@@ -52,6 +52,7 @@ interface Bundle {
   brand?: { id: number; title: string } | null;
   total_price: number;
   discount_price: number;
+  bnpl_price?: number | null;
   inver_rating?: string;
   total_output?: string;
   total_load?: string | null;
@@ -125,6 +126,7 @@ const BundleMgt = () => {
     brand_id: "" as string | number,
     total_price: "",
     discount_price: "",
+    bnpl_price: "",
     inver_rating: "",
     total_output: "",
     total_load: "",
@@ -223,6 +225,8 @@ const BundleMgt = () => {
   const parseOrderItemVisibility = (title: string) => {
     if (title.startsWith(OL_VIS_TROO_PREFIX)) return "troosolar" as const;
     if (title.startsWith(OL_VIS_OWN_PREFIX)) return "own" as const;
+    const clean = stripOrderItemPrefix(title).toLowerCase();
+    if (clean.includes("installation material")) return "own" as const;
     if (title.startsWith(OL_PREFIX)) return "both" as const;
     return "both" as const;
   };
@@ -252,6 +256,7 @@ const BundleMgt = () => {
     if (title.startsWith(FEE_VIS_BOTH_PREFIX)) return "both" as const;
     const lower = title.toLowerCase();
     // Backward-compatible defaults for existing untagged fee names (legacy rows only)
+    if (lower.includes("material")) return "own" as const;
     if (lower.includes("installation fee") || lower.includes("inspection fee")) return "troosolar" as const;
     if (lower.includes("delivery fee") || lower.includes("delivery/logistics")) return "both" as const;
     return "both" as const;
@@ -616,6 +621,7 @@ const BundleMgt = () => {
         brand_id: brandId,
         total_price: bundle.total_price.toString(),
         discount_price: bundle.discount_price?.toString() || "",
+        bnpl_price: bundle.bnpl_price != null && bundle.bnpl_price > 0 ? bundle.bnpl_price.toString() : "",
         inver_rating: bundle.inver_rating || "",
         total_output: bundle.total_output || "",
         total_load: bundle.total_load || "",
@@ -676,6 +682,9 @@ const BundleMgt = () => {
       is_available: bundleFormData.is_available,
       total_price: parseFloat(bundleFormData.total_price) || 0,
       discount_price: parseFloat(bundleFormData.discount_price) || 0,
+      bnpl_price: bundleFormData.bnpl_price.trim() !== ""
+        ? parseFloat(bundleFormData.bnpl_price) || 0
+        : null,
     };
 
     if (bundleFormData.brand_id !== "" && bundleFormData.brand_id != null) {
@@ -1018,6 +1027,7 @@ const BundleMgt = () => {
                   <th className="px-6 py-4 text-left text-sm font-medium text-black">Total Load</th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-black">Total Price</th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-black">Discount Price</th>
+                  <th className="px-6 py-4 text-left text-sm font-medium text-black">BNPL Price</th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-black">Discount %</th>
                   <th className="px-6 py-4 text-center text-sm font-medium text-black">Actions</th>
                 </tr>
@@ -1025,7 +1035,7 @@ const BundleMgt = () => {
               <tbody className="bg-white">
                 {filteredBundles.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-6 py-8 text-center text-gray-500">
+                    <td colSpan={11} className="px-6 py-8 text-center text-gray-500">
                       No bundles found
                     </td>
                   </tr>
@@ -1082,6 +1092,15 @@ const BundleMgt = () => {
                             </span>
                           ) : (
                             "-"
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">
+                          {bundle.bnpl_price != null && bundle.bnpl_price > 0 ? (
+                            <span className="text-[#273E8E]">
+                              ₦{bundle.bnpl_price.toLocaleString()}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-xs">Uses Buy Now price</span>
                           )}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-900">
@@ -1214,17 +1233,27 @@ const BundleMgt = () => {
                 {/* ── Section 2: Pricing ── */}
                 <div className="bg-gray-50 rounded-lg p-4 space-y-3">
                   <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Pricing</h3>
-                  <div className="grid grid-cols-2 gap-4">
+                  <p className="text-xs text-gray-500">
+                    Buy Now uses Total / Discount price. BNPL uses BNPL Price when set; otherwise it falls back to the Buy Now price.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Total Price (₦) <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Total Price (₦) — Buy Now <span className="text-red-500">*</span></label>
                       <input type="number" required step="0.01" value={bundleFormData.total_price}
                         onChange={(e) => setBundleFormData({ ...bundleFormData, total_price: e.target.value })}
                         className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Discount Price (₦)</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Discount Price (₦) — Buy Now</label>
                       <input type="number" step="0.01" value={bundleFormData.discount_price}
                         onChange={(e) => setBundleFormData({ ...bundleFormData, discount_price: e.target.value })}
+                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">BNPL Price (₦)</label>
+                      <input type="number" step="0.01" value={bundleFormData.bnpl_price}
+                        onChange={(e) => setBundleFormData({ ...bundleFormData, bnpl_price: e.target.value })}
+                        placeholder="Optional — separate BNPL catalog price"
                         className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
                     </div>
                   </div>

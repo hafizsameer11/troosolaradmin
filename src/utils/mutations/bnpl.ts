@@ -136,6 +136,14 @@ export const updateBNPLSettings = async (
     minimum_loan_amount?: number;
     credit_check_fee?: number;
     loan_durations?: number[];
+    terms_gate_title?: string;
+    terms_gate_subtitle?: string;
+    terms_gate_checkbox_prefix?: string;
+    terms_gate_terms_label?: string;
+    terms_gate_privacy_label?: string;
+    terms_gate_proceed_label?: string;
+    terms_of_service_url?: string;
+    terms_privacy_policy_url?: string;
   },
   token: string
 ): Promise<{ status: string; data?: any; message: string }> => {

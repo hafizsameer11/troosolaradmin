@@ -609,6 +609,14 @@ const BNPLBuyNow: React.FC = () => {
     insurance_fee_percentage: "",
     minimum_loan_amount: "",
     loan_durations: [] as number[],
+    terms_gate_title: "",
+    terms_gate_subtitle: "",
+    terms_gate_checkbox_prefix: "",
+    terms_gate_terms_label: "",
+    terms_gate_privacy_label: "",
+    terms_gate_proceed_label: "",
+    terms_of_service_url: "",
+    terms_privacy_policy_url: "",
     newDownPaymentOption: "",
     newDuration: "",
   });
@@ -816,6 +824,14 @@ const BNPLBuyNow: React.FC = () => {
         insurance_fee_percentage: String(bnplSettings.insurance_fee_percentage ?? ""),
         minimum_loan_amount: String(bnplSettings.minimum_loan_amount ?? ""),
         loan_durations: Array.isArray(bnplSettings.loan_durations) ? [...bnplSettings.loan_durations] : [],
+        terms_gate_title: String(bnplSettings.terms_gate?.title ?? bnplSettings.terms_gate_title ?? ""),
+        terms_gate_subtitle: String(bnplSettings.terms_gate?.subtitle ?? bnplSettings.terms_gate_subtitle ?? ""),
+        terms_gate_checkbox_prefix: String(bnplSettings.terms_gate?.checkbox_prefix ?? bnplSettings.terms_gate_checkbox_prefix ?? ""),
+        terms_gate_terms_label: String(bnplSettings.terms_gate?.terms_label ?? bnplSettings.terms_gate_terms_label ?? ""),
+        terms_gate_privacy_label: String(bnplSettings.terms_gate?.privacy_label ?? bnplSettings.terms_gate_privacy_label ?? ""),
+        terms_gate_proceed_label: String(bnplSettings.terms_gate?.proceed_label ?? bnplSettings.terms_gate_proceed_label ?? ""),
+        terms_of_service_url: String(bnplSettings.terms_gate?.terms_url ?? bnplSettings.terms_of_service_url ?? ""),
+        terms_privacy_policy_url: String(bnplSettings.terms_gate?.privacy_url ?? bnplSettings.terms_privacy_policy_url ?? ""),
       }));
     }
   }, [activeTab, bnplSettings]);
@@ -2150,6 +2166,14 @@ const BNPLBuyNow: React.FC = () => {
                       insurance_fee_percentage: loanSettingsForm.insurance_fee_percentage ? Number(loanSettingsForm.insurance_fee_percentage) : undefined,
                       minimum_loan_amount: loanSettingsForm.minimum_loan_amount ? Number(loanSettingsForm.minimum_loan_amount) : undefined,
                       loan_durations: loanSettingsForm.loan_durations.length ? loanSettingsForm.loan_durations : undefined,
+                      terms_gate_title: loanSettingsForm.terms_gate_title || undefined,
+                      terms_gate_subtitle: loanSettingsForm.terms_gate_subtitle || undefined,
+                      terms_gate_checkbox_prefix: loanSettingsForm.terms_gate_checkbox_prefix || undefined,
+                      terms_gate_terms_label: loanSettingsForm.terms_gate_terms_label || undefined,
+                      terms_gate_privacy_label: loanSettingsForm.terms_gate_privacy_label || undefined,
+                      terms_gate_proceed_label: loanSettingsForm.terms_gate_proceed_label || undefined,
+                      terms_of_service_url: loanSettingsForm.terms_of_service_url || undefined,
+                      terms_privacy_policy_url: loanSettingsForm.terms_privacy_policy_url || undefined,
                     }, token);
                     queryClient.invalidateQueries({ queryKey: ["bnpl-settings"] });
                     alert("Loan settings saved successfully.");
@@ -2246,6 +2270,52 @@ const BNPLBuyNow: React.FC = () => {
                     <div className="flex gap-2">
                       <input type="number" min="1" max="120" placeholder="e.g. 18" className="w-20 border border-gray-300 rounded-lg px-2 py-1 text-sm" value={loanSettingsForm.newDuration} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, newDuration: e.target.value }))} />
                       <button type="button" className="px-3 py-1 bg-gray-200 rounded-lg text-sm hover:bg-gray-300" onClick={() => { const n = parseInt(loanSettingsForm.newDuration, 10); if (!isNaN(n) && n >= 1 && n <= 120 && !loanSettingsForm.loan_durations.includes(n)) { setLoanSettingsForm((f) => ({ ...f, loan_durations: [...f.loan_durations, n].sort((a, b) => a - b), newDuration: "" })); } }}>Add</button>
+                    </div>
+                  </div>
+                </div>
+                <div className="border-t border-gray-200 pt-6 mt-2">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">BNPL Terms Gate</h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Copy shown on the Terms of Use Agreement screen before users start a BNPL application. Leave blank to use defaults.
+                  </p>
+                  <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                      <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Terms of Use Agreement" value={loanSettingsForm.terms_gate_title} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, terms_gate_title: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Subtitle</label>
+                      <textarea rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Accept the terms of service and privacy policy to continue" value={loanSettingsForm.terms_gate_subtitle} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, terms_gate_subtitle: e.target.value }))} />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Checkbox prefix</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="I accept the" value={loanSettingsForm.terms_gate_checkbox_prefix} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, terms_gate_checkbox_prefix: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Proceed button label</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Proceed" value={loanSettingsForm.terms_gate_proceed_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, terms_gate_proceed_label: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Terms of Service link label</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Terms Of Service" value={loanSettingsForm.terms_gate_terms_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, terms_gate_terms_label: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Privacy Policy link label</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Privacy Policy" value={loanSettingsForm.terms_gate_privacy_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, terms_gate_privacy_label: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Terms of Service URL</label>
+                        <input type="url" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="https://troosolar.io/terms-of-service/" value={loanSettingsForm.terms_of_service_url} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, terms_of_service_url: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Privacy Policy URL</label>
+                        <input type="url" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="https://troosolar.io/privacy-policy/" value={loanSettingsForm.terms_privacy_policy_url} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, terms_privacy_policy_url: e.target.value }))} />
+                      </div>
                     </div>
                   </div>
                 </div>
