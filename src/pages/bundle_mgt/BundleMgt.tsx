@@ -127,6 +127,8 @@ const BundleMgt = () => {
     total_price: "",
     discount_price: "",
     bnpl_price: "",
+    discount_percent: "",
+    discount_amount_off: "",
     inver_rating: "",
     total_output: "",
     total_load: "",
@@ -594,6 +596,8 @@ const BundleMgt = () => {
       total_price: "",
       discount_price: "",
       bnpl_price: "",
+      discount_percent: "",
+      discount_amount_off: "",
       inver_rating: "",
       total_output: "",
       total_load: "",
@@ -615,14 +619,20 @@ const BundleMgt = () => {
       setEditingBundle(bundle);
       const brandId = bundle.brand_id ?? bundle.brand?.id ?? "";
       const sp = bundle.specifications ?? {};
+      const list = bundle.total_price;
+      const sale = buyNowSalePrice(list, bundle.discount_price || 0);
+      const amountOff = discountAmountOff(list, sale);
+      const percentOff = discountPercentOff(list, sale);
       setBundleFormData({
         title: bundle.title,
         bundle_type: bundle.bundle_type,
         is_available: bundle.is_available !== false,
         brand_id: brandId,
         total_price: bundle.total_price.toString(),
-        discount_price: bundle.discount_price?.toString() || "",
+        discount_price: amountOff > 0 ? sale.toString() : "",
         bnpl_price: bundle.bnpl_price != null && bundle.bnpl_price > 0 ? bundle.bnpl_price.toString() : "",
+        discount_percent: percentOff > 0 ? percentOff.toString() : "",
+        discount_amount_off: amountOff > 0 ? amountOff.toString() : "",
         inver_rating: bundle.inver_rating || "",
         total_output: bundle.total_output || "",
         total_load: bundle.total_load || "",
@@ -677,12 +687,14 @@ const BundleMgt = () => {
 
   const handleBundleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const list = parseFloat(bundleFormData.total_price) || 0;
+    const sale = buyNowSalePrice(list, parseFloat(bundleFormData.discount_price) || 0);
     const payload: any = {
       title: bundleFormData.title,
       bundle_type: bundleFormData.bundle_type,
       is_available: bundleFormData.is_available,
-      total_price: parseFloat(bundleFormData.total_price) || 0,
-      discount_price: parseFloat(bundleFormData.discount_price) || 0,
+      total_price: list,
+      discount_price: sale > 0 && sale < list ? sale : 0,
       bnpl_price: bundleFormData.bnpl_price.trim() !== ""
         ? parseFloat(bundleFormData.bnpl_price) || 0
         : null,
@@ -749,10 +761,67 @@ const BundleMgt = () => {
     bundle.bundle_type.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Calculate discount percentage
-  const calculateDiscountPercentage = (total: number, discount: number) => {
-    if (total === 0 || discount === 0) return 0;
-    return Math.round((discount / total) * 100);
+  // Buy Now: total_price = list/was price; discount_price = sale price (not discount amount).
+  const parseMoneyInput = (value: string) => {
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const buyNowSalePrice = (list: number, sale: number) => {
+    if (list <= 0) return 0;
+    if (sale > 0 && sale < list) return sale;
+    return list;
+  };
+
+  const discountAmountOff = (list: number, sale: number) => {
+    if (list <= 0 || sale <= 0 || sale >= list) return 0;
+    return list - sale;
+  };
+
+  const discountPercentOff = (list: number, sale: number) => {
+    if (list <= 0 || sale <= 0 || sale >= list) return 0;
+    return Math.round(((list - sale) / list) * 1000) / 10;
+  };
+
+  const calculateDiscountPercentage = (total: number, salePrice: number) => {
+    return discountPercentOff(total, salePrice);
+  };
+
+  const syncBuyNowPricing = (
+    listRaw: string,
+    saleRaw: string,
+    percentRaw?: string,
+    amountRaw?: string,
+    source: "list" | "sale" | "percent" | "amount" = "sale"
+  ) => {
+    const list = parseMoneyInput(listRaw);
+    let sale = parseMoneyInput(saleRaw);
+    let percent = parseMoneyInput(percentRaw ?? "");
+    let amount = parseMoneyInput(amountRaw ?? "");
+
+    if (source === "percent" && list > 0 && percent > 0) {
+      sale = Math.max(0, list - (list * percent) / 100);
+      amount = discountAmountOff(list, sale);
+    } else if (source === "amount" && list > 0 && amount > 0) {
+      sale = Math.max(0, list - amount);
+      percent = discountPercentOff(list, sale);
+    } else if (source === "list" || source === "sale") {
+      if (sale <= 0 || sale >= list) {
+        sale = list;
+        percent = 0;
+        amount = 0;
+      } else {
+        percent = discountPercentOff(list, sale);
+        amount = discountAmountOff(list, sale);
+      }
+    }
+
+    return {
+      total_price: listRaw,
+      discount_price: sale > 0 && sale < list ? String(Math.round(sale)) : "",
+      discount_percent: percent > 0 ? String(percent) : "",
+      discount_amount_off: amount > 0 ? String(Math.round(amount)) : "",
+    };
   };
 
   // Material management handlers
@@ -1026,10 +1095,10 @@ const BundleMgt = () => {
                   <th className="px-6 py-4 text-left text-sm font-medium text-black">Inverter Rating</th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-black">Total Output</th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-black">Total Load</th>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-black">Total Price</th>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-black">Discount Price</th>
+                  <th className="px-6 py-4 text-left text-sm font-medium text-black">List Price</th>
+                  <th className="px-6 py-4 text-left text-sm font-medium text-black">Buy Now Sale</th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-black">BNPL Price</th>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-black">Discount %</th>
+                  <th className="px-6 py-4 text-left text-sm font-medium text-black">Buy Now % Off</th>
                   <th className="px-6 py-4 text-center text-sm font-medium text-black">Actions</th>
                 </tr>
               </thead>
@@ -1042,9 +1111,10 @@ const BundleMgt = () => {
                   </tr>
                 ) : (
                   filteredBundles.map((bundle, index) => {
+                    const salePrice = buyNowSalePrice(bundle.total_price, bundle.discount_price || 0);
                     const discountPercentage = calculateDiscountPercentage(
                       bundle.total_price,
-                      bundle.discount_price
+                      salePrice
                     );
                     return (
                       <tr
@@ -1087,12 +1157,12 @@ const BundleMgt = () => {
                           ₦{bundle.total_price.toLocaleString()}
                         </td>
                         <td className="px-6 py-4 text-sm font-semibold text-gray-900">
-                          {bundle.discount_price > 0 ? (
+                          {salePrice > 0 && salePrice < bundle.total_price ? (
                             <span className="text-green-600">
-                              ₦{bundle.discount_price.toLocaleString()}
+                              ₦{salePrice.toLocaleString()}
                             </span>
                           ) : (
-                            "-"
+                            <span className="text-gray-500 text-xs">Same as list</span>
                           )}
                         </td>
                         <td className="px-6 py-4 text-sm font-semibold text-gray-900">
@@ -1235,26 +1305,56 @@ const BundleMgt = () => {
                 <div className="bg-gray-50 rounded-lg p-4 space-y-3">
                   <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Pricing</h3>
                   <p className="text-xs text-gray-500">
-                    Buy Now uses Total / Discount price. BNPL uses BNPL Price when set; otherwise it falls back to the Buy Now price.
+                    <strong>List price</strong> is the original/was price. <strong>Buy Now sale</strong> is what cash/Buy Now customers pay (use % off or ₦ off to calculate it).
+                    <strong> BNPL price</strong> is separate — set it only when BNPL should differ from Buy Now.
                   </p>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Total Price (₦) — Buy Now <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">List Price (₦) <span className="text-red-500">*</span></label>
                       <input type="number" required step="0.01" value={bundleFormData.total_price}
-                        onChange={(e) => setBundleFormData({ ...bundleFormData, total_price: e.target.value })}
-                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Discount Price (₦) — Buy Now</label>
-                      <input type="number" step="0.01" value={bundleFormData.discount_price}
-                        onChange={(e) => setBundleFormData({ ...bundleFormData, discount_price: e.target.value })}
+                        onChange={(e) => setBundleFormData((f) => ({
+                          ...f,
+                          ...syncBuyNowPricing(e.target.value, f.discount_price, f.discount_percent, f.discount_amount_off, "list"),
+                        }))}
                         className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">BNPL Price (₦)</label>
                       <input type="number" step="0.01" value={bundleFormData.bnpl_price}
                         onChange={(e) => setBundleFormData({ ...bundleFormData, bnpl_price: e.target.value })}
-                        placeholder="Optional — separate BNPL catalog price"
+                        placeholder="Optional — leave blank to use Buy Now sale price"
+                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Buy Now Sale Price (₦)</label>
+                      <input type="number" step="0.01" value={bundleFormData.discount_price}
+                        onChange={(e) => setBundleFormData((f) => ({
+                          ...f,
+                          ...syncBuyNowPricing(f.total_price, e.target.value, f.discount_percent, f.discount_amount_off, "sale"),
+                        }))}
+                        placeholder="Same as list if no discount"
+                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Buy Now Discount (%)</label>
+                      <input type="number" step="0.1" min="0" max="100" value={bundleFormData.discount_percent}
+                        onChange={(e) => setBundleFormData((f) => ({
+                          ...f,
+                          ...syncBuyNowPricing(f.total_price, f.discount_price, e.target.value, f.discount_amount_off, "percent"),
+                        }))}
+                        placeholder="e.g. 7.4"
+                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Buy Now Discount (₦ off)</label>
+                      <input type="number" step="0.01" min="0" value={bundleFormData.discount_amount_off}
+                        onChange={(e) => setBundleFormData((f) => ({
+                          ...f,
+                          ...syncBuyNowPricing(f.total_price, f.discount_price, f.discount_percent, e.target.value, "amount"),
+                        }))}
+                        placeholder="e.g. 100000"
                         className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
                     </div>
                   </div>
