@@ -4,7 +4,7 @@ import ConfirmDeleteModal from "./ConfirmDeleteModal";
 import LoadingSpinner from "../../components/common/LoadingSpinner";
 
 //Code Related to Integration
-import { deletePartnerFinancing } from "../../utils/mutations/finance";
+import { deletePartnerFinancing, updatePartnerFinancing } from "../../utils/mutations/finance";
 import { getAllFinance } from "../../utils/queries/finance";
 import { useQuery } from "@tanstack/react-query";
 import { useMutation } from "@tanstack/react-query";
@@ -18,6 +18,7 @@ interface Partner {
   amount: string;
   dateCreated: string;
   status: "Active" | "Inactive";
+  isTroosolar?: boolean;
 }
 
 const FinancingPartner = () => {
@@ -59,6 +60,7 @@ const FinancingPartner = () => {
             p["Status"] === "active" || p["Status"] === "Active"
               ? "Active"
               : "Inactive",
+          isTroosolar: !!(p.is_troosolar || String(p.slug || "").toLowerCase() === "troosolar"),
         }))
       );
       setApiMessage(data.message || "");
@@ -88,31 +90,8 @@ const FinancingPartner = () => {
     setEditData(null);
   };
 
-  const handleSavePartner = (partnerData: any) => {
-    if (editMode && editData) {
-      setPartners(
-        partners.map((p) =>
-          p.id === editData.id
-            ? {
-              ...p,
-              name: partnerData.partnerName,
-              status: partnerData.status,
-              // Optionally update other fields if needed
-            }
-            : p
-        )
-      );
-    } else {
-      const newPartner: Partner = {
-        id: (partners.length + 1).toString(),
-        name: partnerData.partnerName,
-        numberOfLoans: 0,
-        amount: "N0",
-        dateCreated: new Date().toLocaleDateString(),
-        status: partnerData.status,
-      };
-      setPartners([...partners, newPartner]);
-    }
+  const handleSavePartner = (_partnerData: any) => {
+    refetch();
   };
 
   // Delete partner mutation
@@ -123,8 +102,35 @@ const FinancingPartner = () => {
     },
   });
 
+  const toggleStatusMutation = useMutation({
+    mutationFn: (partner: Partner) =>
+      updatePartnerFinancing(
+        partner.id,
+        {
+          name: partner.name,
+          email: partner.partnerEmail || "",
+          status: partner.status === "Active" ? "Inactive" : "Active",
+        },
+        token || ""
+      ),
+    onSuccess: () => {
+      refetch();
+    },
+  });
+
+  const handleToggleStatus = (partnerId: string) => {
+    const partner = partners.find((p) => p.id === partnerId);
+    if (partner) {
+      toggleStatusMutation.mutate(partner);
+    }
+  };
+
   const handleDelete = (partnerId: string) => {
     const partner = partners.find((p) => p.id === partnerId);
+    if (partner?.isTroosolar) {
+      setApiMessage("Troosolar cannot be deleted. Set status to Inactive to hide it from the customer BNPL list.");
+      return;
+    }
     if (partner) {
       setPartnerToDelete(partner);
       setShowDeleteModal(true);
@@ -153,10 +159,14 @@ const FinancingPartner = () => {
   return (
     <div className="w-full">
       {/* Add New Partner Button */}
-      <div className="flex justify-end mb-6">
+      <div className="flex justify-between items-start gap-4 mb-6">
+        <p className="text-sm text-gray-600 max-w-2xl">
+          Active financing options (including <span className="font-medium">Troosolar</span>) appear on the customer BNPL Final Application list.
+          Set status to Inactive to hide an option without deleting it.
+        </p>
         <button
           onClick={handleAddNewPartner}
-          className="bg-[#273E8E] text-white px-6 py-3 rounded-full font-medium hover:bg-[#273E8E] transition-colors cursor-pointer"
+          className="bg-[#273E8E] text-white px-6 py-3 rounded-full font-medium hover:bg-[#273E8E] transition-colors cursor-pointer whitespace-nowrap"
         >
           Add New Partner
         </button>
@@ -250,29 +260,47 @@ const FinancingPartner = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <span
-                      className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${partner.status === "Active"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-red-100 text-red-800"
-                        }`}
-                    >
-                      {partner.status}
-                    </span>
+                    <div className="flex flex-col items-center gap-1">
+                      <span
+                        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${partner.status === "Active"
+                            ? "bg-green-100 text-green-800"
+                            : "bg-red-100 text-red-800"
+                          }`}
+                      >
+                        {partner.status}
+                      </span>
+                      {partner.isTroosolar ? (
+                        <span className="text-[10px] uppercase tracking-wide text-[#273E8E]">Internal</span>
+                      ) : null}
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <div className="flex justify-center items-center space-x-2">
+                    <div className="flex justify-center items-center flex-wrap gap-2">
+                      <button
+                        onClick={() => handleToggleStatus(partner.id)}
+                        disabled={toggleStatusMutation.isPending}
+                        className={`px-5 py-3 rounded-full text-sm font-xs transition-colors cursor-pointer ${
+                          partner.status === "Active"
+                            ? "bg-amber-100 text-amber-900 hover:bg-amber-200"
+                            : "bg-green-100 text-green-900 hover:bg-green-200"
+                        }`}
+                      >
+                        {partner.status === "Active" ? "Deactivate" : "Activate"}
+                      </button>
                       <button
                         onClick={() => handleEditCategory(partner.id)}
                         className="bg-[#273E8E] text-white px-5 py-3 rounded-full text-sm font-xs hover:bg-[#1f2f7a] transition-colors cursor-pointer"
                       >
-                        Edit Category
+                        Edit
                       </button>
-                      <button
-                        onClick={() => handleDelete(partner.id)}
-                        className="bg-[#FF0000] text-white px-10 py-3 rounded-full text-sm font-xs hover:bg-[#FF0000] transition-colors cursor-pointer"
-                      >
-                        Delete
-                      </button>
+                      {!partner.isTroosolar ? (
+                        <button
+                          onClick={() => handleDelete(partner.id)}
+                          className="bg-[#FF0000] text-white px-8 py-3 rounded-full text-sm font-xs hover:bg-[#FF0000] transition-colors cursor-pointer"
+                        >
+                          Delete
+                        </button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>

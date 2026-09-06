@@ -137,14 +137,12 @@ function bnplDisplayBvn(
   return null;
 }
 
-/** Submitted personal rows merged into loan_plan_snapshot.final_application_personal (BNPL Final Application step). */
-function bnplFinalApplicationPersonalFromSnapshot(snapshot: unknown): {
-  full_name: string | null;
-  bvn: string | null;
-  phone: string | null;
-  email: string | null;
-  social_media: string | null;
-} | null {
+/** Snapshot helpers for BNPL Final Application (Phase 1 expanded fields). */
+function bnplSnapStr(v: unknown): string | null {
+  return v != null && String(v).trim() !== "" ? String(v).trim() : null;
+}
+
+function bnplFinalApplicationPersonalFromSnapshot(snapshot: unknown): Record<string, string | null> | null {
   if (snapshot == null || typeof snapshot !== "object" || Array.isArray(snapshot)) {
     return null;
   }
@@ -153,15 +151,41 @@ function bnplFinalApplicationPersonalFromSnapshot(snapshot: unknown): {
     return null;
   }
   const p = fa as Record<string, unknown>;
-  const s = (v: unknown): string | null =>
-    v != null && String(v).trim() !== "" ? String(v).trim() : null;
   return {
-    full_name: s(p.full_name),
-    bvn: s(p.bvn),
-    phone: s(p.phone),
-    email: s(p.email),
-    social_media: s(p.social_media),
+    full_name: bnplSnapStr(p.full_name),
+    bank_account_no: bnplSnapStr(p.bank_account_no),
+    bank_name: bnplSnapStr(p.bank_name),
+    bvn: bnplSnapStr(p.bvn),
+    phone: bnplSnapStr(p.phone),
+    email: bnplSnapStr(p.email),
+    gender: bnplSnapStr(p.gender),
+    date_of_birth: bnplSnapStr(p.date_of_birth),
+    marital_status: bnplSnapStr(p.marital_status),
+    occupation: bnplSnapStr(p.occupation),
+    monthly_income: bnplSnapStr(p.monthly_income),
+    social_media: bnplSnapStr(p.social_media),
+    id_type: bnplSnapStr(p.id_type),
+    id_expiry_date: bnplSnapStr(p.id_expiry_date),
+    id_no: bnplSnapStr(p.id_no),
   };
+}
+
+function bnplSnapshotSection(
+  snapshot: unknown,
+  key: string
+): Record<string, string | null> | null {
+  if (snapshot == null || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+    return null;
+  }
+  const section = (snapshot as Record<string, unknown>)[key];
+  if (section == null || typeof section !== "object" || Array.isArray(section)) {
+    return null;
+  }
+  const out: Record<string, string | null> = {};
+  Object.entries(section as Record<string, unknown>).forEach(([k, v]) => {
+    out[k] = bnplSnapStr(v);
+  });
+  return out;
 }
 
 function bnplDash(v: string | null | undefined): string {
@@ -4487,7 +4511,131 @@ const BNPLBuyNow: React.FC = () => {
                                   Required for verification on the customer flow (e.g. @username or facebook.com/username).
                                 </p>
                               </div>
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">Bank account no</p>
+                                <p className="text-sm font-medium text-gray-900">{bnplDash(snapP?.bank_account_no)}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">Bank name</p>
+                                <p className="text-sm font-medium text-gray-900">{bnplDash(snapP?.bank_name)}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">Gender</p>
+                                <p className="text-sm font-medium text-gray-900">{bnplDash(snapP?.gender)}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">Date of birth</p>
+                                <p className="text-sm font-medium text-gray-900">{bnplDash(snapP?.date_of_birth)}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">Marital status</p>
+                                <p className="text-sm font-medium text-gray-900">{bnplDash(snapP?.marital_status)}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">Occupation</p>
+                                <p className="text-sm font-medium text-gray-900">{bnplDash(snapP?.occupation)}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">Monthly income</p>
+                                <p className="text-sm font-medium text-gray-900">{bnplDash(snapP?.monthly_income)}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">ID type</p>
+                                <p className="text-sm font-medium text-gray-900">{bnplDash(snapP?.id_type)}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">ID expiry</p>
+                                <p className="text-sm font-medium text-gray-900">{bnplDash(snapP?.id_expiry_date)}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">ID no</p>
+                                <p className="text-sm font-medium text-gray-900">{bnplDash(snapP?.id_no)}</p>
+                              </div>
                             </div>
+
+                            {(() => {
+                              const nok = bnplSnapshotSection(selectedItem.loan_plan_snapshot, "final_application_next_of_kin");
+                              const emp = bnplSnapshotSection(selectedItem.loan_plan_snapshot, "final_application_employment");
+                              const biz = bnplSnapshotSection(selectedItem.loan_plan_snapshot, "final_application_business");
+                              const fin = bnplSnapshotSection(selectedItem.loan_plan_snapshot, "financing");
+                              const agree = bnplSnapshotSection(selectedItem.loan_plan_snapshot, "finance_agreement");
+                              return (
+                                <>
+                                  {nok && (nok.name || nok.phone || nok.address) ? (
+                                    <div className="mt-6 pt-4 border-t border-gray-100">
+                                      <h4 className="text-sm font-semibold text-gray-800 mb-3">Next of kin</h4>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div><p className="text-xs text-gray-500 mb-1">Name</p><p className="text-sm font-medium text-gray-900">{bnplDash(nok.name)}</p></div>
+                                        <div><p className="text-xs text-gray-500 mb-1">Phone</p><p className="text-sm font-medium text-gray-900">{bnplDash(nok.phone)}</p></div>
+                                        <div className="md:col-span-2"><p className="text-xs text-gray-500 mb-1">Address</p><p className="text-sm font-medium text-gray-900">{bnplDash(nok.address)}</p></div>
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                  {emp && (emp.company_name || emp.company_address || emp.employment_duration) ? (
+                                    <div className="mt-6 pt-4 border-t border-gray-100">
+                                      <h4 className="text-sm font-semibold text-gray-800 mb-3">Employment details</h4>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div><p className="text-xs text-gray-500 mb-1">Company name</p><p className="text-sm font-medium text-gray-900">{bnplDash(emp.company_name)}</p></div>
+                                        <div><p className="text-xs text-gray-500 mb-1">Duration</p><p className="text-sm font-medium text-gray-900">{bnplDash(emp.employment_duration)}</p></div>
+                                        <div className="md:col-span-2"><p className="text-xs text-gray-500 mb-1">Company address</p><p className="text-sm font-medium text-gray-900">{bnplDash(emp.company_address)}</p></div>
+                                        <div><p className="text-xs text-gray-500 mb-1">Staff ID</p><p className="text-sm font-medium text-gray-900">{bnplDash(emp.staff_id_no)}</p></div>
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                  {biz && (biz.business_name || biz.business_rc_bn) ? (
+                                    <div className="mt-6 pt-4 border-t border-gray-100">
+                                      <h4 className="text-sm font-semibold text-gray-800 mb-3">Business details</h4>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div><p className="text-xs text-gray-500 mb-1">Business name</p><p className="text-sm font-medium text-gray-900">{bnplDash(biz.business_name)}</p></div>
+                                        <div><p className="text-xs text-gray-500 mb-1">RC/BN</p><p className="text-sm font-medium text-gray-900">{bnplDash(biz.business_rc_bn)}</p></div>
+                                        <div className="md:col-span-2"><p className="text-xs text-gray-500 mb-1">Business address</p><p className="text-sm font-medium text-gray-900">{bnplDash(biz.business_address)}</p></div>
+                                        <div><p className="text-xs text-gray-500 mb-1">Business bank account</p><p className="text-sm font-medium text-gray-900">{bnplDash(biz.business_bank_account_no)}</p></div>
+                                        <div><p className="text-xs text-gray-500 mb-1">Business bank name</p><p className="text-sm font-medium text-gray-900">{bnplDash(biz.business_bank_name)}</p></div>
+                                        <div><p className="text-xs text-gray-500 mb-1">Annual turnover</p><p className="text-sm font-medium text-gray-900">{bnplDash(biz.annual_turnover)}</p></div>
+                                        <div><p className="text-xs text-gray-500 mb-1">Avg monthly turnover</p><p className="text-sm font-medium text-gray-900">{bnplDash(biz.avg_monthly_turnover)}</p></div>
+                                        <div><p className="text-xs text-gray-500 mb-1">Date of incorporation</p><p className="text-sm font-medium text-gray-900">{bnplDash(biz.date_of_incorporation)}</p></div>
+                                        <div><p className="text-xs text-gray-500 mb-1">Official email</p><p className="text-sm font-medium text-gray-900">{bnplDash(biz.official_email)}</p></div>
+                                        <div className="md:col-span-2"><p className="text-xs text-gray-500 mb-1">Business ownership</p><p className="text-sm font-medium text-gray-900 whitespace-pre-wrap">{bnplDash(biz.business_ownership)}</p></div>
+                                        <div className="md:col-span-2"><p className="text-xs text-gray-500 mb-1">Nature of business</p><p className="text-sm font-medium text-gray-900">{bnplDash(biz.nature_of_business)}</p></div>
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                  <div className="mt-6 pt-4 border-t border-gray-100">
+                                    <h4 className="text-sm font-semibold text-gray-800 mb-3">Financing path</h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <div>
+                                        <p className="text-xs text-gray-500 mb-1">Path</p>
+                                        <p className="text-sm font-medium text-gray-900 capitalize">
+                                          {bnplDash(
+                                            (selectedItem as any).financing_path != null
+                                              ? String((selectedItem as any).financing_path)
+                                              : fin?.path || null
+                                          )}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-xs text-gray-500 mb-1">Partner</p>
+                                        <p className="text-sm font-medium text-gray-900">
+                                          {bnplDash(
+                                            (selectedItem as any).financing_partner?.name ||
+                                              fin?.partner_name ||
+                                              null
+                                          )}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-xs text-gray-500 mb-1">Finance agreement</p>
+                                        <p className="text-sm font-medium text-gray-900">
+                                          {(selectedItem as any).finance_agreement_accepted_at || agree?.accepted_at
+                                            ? "Accepted"
+                                            : "—"}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </>
+                              );
+                            })()}
 
                             <div className="mt-6 pt-4 border-t border-gray-100">
                               <h4 className="text-sm font-semibold text-gray-800 mb-3">Credit check</h4>
@@ -4585,6 +4733,14 @@ const BNPLBuyNow: React.FC = () => {
                             {selectedItem.property_rooms != null && selectedItem.property_rooms !== ""
                               ? String(selectedItem.property_rooms)
                               : "—"}
+                          </p>
+                          <p>
+                            <span className="font-semibold text-gray-700">Property status:</span>{" "}
+                            {bnplDash(
+                              (selectedItem as any).property_status != null
+                                ? String((selectedItem as any).property_status)
+                                : null
+                            )}
                           </p>
                           <p>
                             <span className="font-semibold text-gray-700">Gated Estate:</span>{" "}
