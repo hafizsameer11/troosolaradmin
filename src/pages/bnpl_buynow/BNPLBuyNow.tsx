@@ -2211,8 +2211,9 @@ const BNPLBuyNow: React.FC = () => {
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Interest rate (%)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Interest rate (% per month)</label>
                     <input type="number" step="0.01" min="0" max="100" className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.interest_rate_percentage} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, interest_rate_percentage: e.target.value }))} />
+                    <p className="text-xs text-gray-500 mt-1">Applied on the customer Loan Calculator breakdown. Total interest = loan amount × rate × tenor months.</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Minimum down options (%)</label>
