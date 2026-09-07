@@ -40,6 +40,7 @@ import {
   updateAuditRequestStatus,
   uploadAuditPaymentReceipt,
   uploadBNPLGuarantorForm,
+  getBNPLGuarantorFormsStatus,
   setBNPLApplicationGuarantor,
   acceptBNPLInstallationDate,
   rejectBNPLInstallationDate,
@@ -611,9 +612,10 @@ const BNPLBuyNow: React.FC = () => {
     quantity: "1",
   });
 
-  // Guarantor Form (admin upload)
-  const [guarantorFormFile, setGuarantorFormFile] = useState<File | null>(null);
-  const [uploadingGuarantorForm, setUploadingGuarantorForm] = useState(false);
+  // Guarantor Forms (admin upload — Residential + SME)
+  const [residentialGuarantorFormFile, setResidentialGuarantorFormFile] = useState<File | null>(null);
+  const [smeGuarantorFormFile, setSmeGuarantorFormFile] = useState<File | null>(null);
+  const [uploadingGuarantorFlow, setUploadingGuarantorFlow] = useState<"residential" | "sme" | null>(null);
 
   // Home Banner (dashboard promo)
   const [bannerFileHome, setBannerFileHome] = useState<File | null>(null);
@@ -833,6 +835,20 @@ const BNPLBuyNow: React.FC = () => {
   });
   const bnplSettings = bnplSettingsData?.data?.data ?? bnplSettingsData?.data ?? null;
   const allowedDurations: number[] = Array.isArray(bnplSettings?.loan_durations) ? bnplSettings.loan_durations : [3, 6, 9, 12];
+
+  const {
+    data: guarantorFormsStatusData,
+    isLoading: guarantorFormsStatusLoading,
+    refetch: refetchGuarantorFormsStatus,
+  } = useQuery({
+    queryKey: ["bnpl-guarantor-forms"],
+    queryFn: () => getBNPLGuarantorFormsStatus(token || ""),
+    enabled: !!token && activeTab === "Guarantor Form",
+  });
+  const guarantorFormsStatus =
+    (guarantorFormsStatusData as any)?.data?.data ??
+    (guarantorFormsStatusData as any)?.data ??
+    null;
 
   useEffect(() => {
     if (activeTab === "Loan Settings" && bnplSettings) {
@@ -2353,54 +2369,102 @@ const BNPLBuyNow: React.FC = () => {
         ) : activeTab === "Mono Loans" ? (
           <MonoLoansSection token={token || ""} />
         ) : activeTab === "Guarantor Form" ? (
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 max-w-2xl">
-            <h2 className="text-xl font-bold text-gray-900 mb-2">BNPL Guarantor Form</h2>
-            <p className="text-sm text-gray-600 mb-6">
-              Upload the guarantor form PDF that approved loan users will download. Use your own template with your terms, conditions, and fields. This file replaces the default form—users see only the option to download this form in their dashboard.
-            </p>
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!guarantorFormFile || !token) return;
-                setUploadingGuarantorForm(true);
-                try {
-                  const res = await uploadBNPLGuarantorForm(guarantorFormFile, token);
-                  if (res?.status === "success") {
-                    alert(res?.message || "Guarantor form updated successfully.");
-                    setGuarantorFormFile(null);
-                  } else {
-                    alert(res?.message || "Upload failed.");
-                  }
-                } catch (err: any) {
-                  const msg = err?.response?.data?.message || err?.message || "Failed to upload guarantor form.";
-                  const errors = err?.response?.data?.errors;
-                  alert(errors ? Object.values(errors).flat().join("\n") : msg);
-                } finally {
-                  setUploadingGuarantorForm(false);
-                }
-              }}
-              className="space-y-4"
-            >
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Select PDF file (max 10MB)</label>
-                <input
-                  type="file"
-                  accept=".pdf,application/pdf"
-                  onChange={(e) => setGuarantorFormFile(e.target.files?.[0] || null)}
-                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#273E8E] file:text-white hover:file:bg-[#1e3270]"
-                />
-                {guarantorFormFile && (
-                  <p className="mt-2 text-sm text-gray-600">Selected: {guarantorFormFile.name}</p>
-                )}
+          <div className="max-w-3xl space-y-6">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">BNPL Guarantor Forms</h2>
+              <p className="text-sm text-gray-600">
+                Upload a separate guarantor form PDF for each process flow. Approved loan users download the form that matches their application type (Residential or SME). Commercial applications use the SME form.
+              </p>
+            </div>
+
+            {guarantorFormsStatusLoading ? (
+              <LoadingSpinner message="Loading form status..." />
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {([
+                  {
+                    flow: "residential" as const,
+                    title: "Residential / Individual",
+                    description: "Downloaded by Residential applicants after approval.",
+                    file: residentialGuarantorFormFile,
+                    setFile: setResidentialGuarantorFormFile,
+                    status: guarantorFormsStatus?.residential,
+                  },
+                  {
+                    flow: "sme" as const,
+                    title: "SME",
+                    description: "Downloaded by SME applicants after approval (also used for Commercial).",
+                    file: smeGuarantorFormFile,
+                    setFile: setSmeGuarantorFormFile,
+                    status: guarantorFormsStatus?.sme,
+                  },
+                ]).map((card) => (
+                  <div key={card.flow} className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+                    <h3 className="text-lg font-bold text-gray-900 mb-1">{card.title}</h3>
+                    <p className="text-sm text-gray-600 mb-4">{card.description}</p>
+                    {card.status?.uploaded ? (
+                      <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4">
+                        Uploaded{card.status.using_legacy ? " (legacy file)" : ""}.
+                        {card.status.updated_at
+                          ? ` Updated ${new Date(card.status.updated_at).toLocaleString()}.`
+                          : ""}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+                        No PDF uploaded yet — customers will get a placeholder until you upload one.
+                      </p>
+                    )}
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!card.file || !token) return;
+                        setUploadingGuarantorFlow(card.flow);
+                        try {
+                          const res = await uploadBNPLGuarantorForm(card.file, token, card.flow);
+                          if (res?.status === "success") {
+                            alert(res?.message || `${card.title} guarantor form updated.`);
+                            card.setFile(null);
+                            refetchGuarantorFormsStatus();
+                            queryClient.invalidateQueries({ queryKey: ["bnpl-guarantor-forms"] });
+                          } else {
+                            alert(res?.message || "Upload failed.");
+                          }
+                        } catch (err: any) {
+                          const msg = err?.response?.data?.message || err?.message || "Failed to upload guarantor form.";
+                          const errors = err?.response?.data?.errors;
+                          alert(errors ? Object.values(errors).flat().join("\n") : msg);
+                        } finally {
+                          setUploadingGuarantorFlow(null);
+                        }
+                      }}
+                      className="space-y-4"
+                    >
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Select PDF file (max 10MB)</label>
+                        <input
+                          type="file"
+                          accept=".pdf,application/pdf"
+                          onChange={(e) => card.setFile(e.target.files?.[0] || null)}
+                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#273E8E] file:text-white hover:file:bg-[#1e3270]"
+                        />
+                        {card.file && (
+                          <p className="mt-2 text-sm text-gray-600">Selected: {card.file.name}</p>
+                        )}
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={!card.file || uploadingGuarantorFlow === card.flow}
+                        className="bg-[#273E8E] hover:bg-[#1e3270] disabled:opacity-50 text-white px-6 py-3 rounded-lg font-medium transition-colors w-full"
+                      >
+                        {uploadingGuarantorFlow === card.flow
+                          ? "Uploading..."
+                          : `Upload ${card.flow === "sme" ? "SME" : "Residential"} Form`}
+                      </button>
+                    </form>
+                  </div>
+                ))}
               </div>
-              <button
-                type="submit"
-                disabled={!guarantorFormFile || uploadingGuarantorForm}
-                className="bg-[#273E8E] hover:bg-[#1e3270] disabled:opacity-50 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-              >
-                {uploadingGuarantorForm ? "Uploading..." : "Upload Guarantor Form"}
-              </button>
-            </form>
+            )}
           </div>
         ) : activeTab === "Banner" ? (
           <div className="flex flex-col gap-8 max-w-2xl">

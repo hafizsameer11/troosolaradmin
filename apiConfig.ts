@@ -190,7 +190,8 @@ const API_ENDPOINTS = {
     BNPLGuarantorsList: API_DOMAIN + "/admin/bnpl/guarantors", // GET
     BNPLGuarantorUpdateStatus: (id: number | string) =>
       `${API_DOMAIN}/admin/bnpl/guarantors/${id}/status`, // PUT
-    BNPLGuarantorFormUpload: API_DOMAIN + "/admin/bnpl/guarantor-form", // POST (multipart: guarantor_form)
+    BNPLGuarantorFormsStatus: API_DOMAIN + "/admin/bnpl/guarantor-forms", // GET
+    BNPLGuarantorFormUpload: API_DOMAIN + "/admin/bnpl/guarantor-form", // POST (multipart: guarantor_form, flow)
     BNPLApplicationSetGuarantor: (id: number | string) =>
       `${API_DOMAIN}/admin/bnpl/applications/${id}/guarantor`, // POST - admin sets guarantor for application
     BNPLApplicationInstallationDateAccept: (id: number | string) =>

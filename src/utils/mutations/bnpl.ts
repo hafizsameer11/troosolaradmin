@@ -155,13 +155,29 @@ export const updateBNPLSettings = async (
   );
 };
 
-// POST /api/admin/bnpl/guarantor-form - upload PDF (FormData: guarantor_form)
+// GET /api/admin/bnpl/guarantor-forms
+export const getBNPLGuarantorFormsStatus = async (
+  token: string
+): Promise<{
+  status: string;
+  data?: {
+    residential?: { flow: string; path: string; uploaded: boolean; using_legacy?: boolean; size_bytes?: number; updated_at?: string | null };
+    sme?: { flow: string; path: string; uploaded: boolean; using_legacy?: boolean; size_bytes?: number; updated_at?: string | null };
+  };
+  message: string;
+}> => {
+  return await apiCall(API_ENDPOINTS.ADMIN.BNPLGuarantorFormsStatus, "GET", undefined, token);
+};
+
+// POST /api/admin/bnpl/guarantor-form - upload PDF (FormData: guarantor_form, flow=residential|sme)
 export const uploadBNPLGuarantorForm = async (
   file: File,
-  token: string
+  token: string,
+  flow: "residential" | "sme"
 ): Promise<{ status: string; data?: any; message: string }> => {
   const formData = new FormData();
   formData.append("guarantor_form", file);
+  formData.append("flow", flow);
   const res = await axios.post(
     API_ENDPOINTS.ADMIN.BNPLGuarantorFormUpload,
     formData,
