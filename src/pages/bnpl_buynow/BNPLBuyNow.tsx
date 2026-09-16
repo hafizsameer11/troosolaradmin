@@ -643,6 +643,11 @@ const BNPLBuyNow: React.FC = () => {
     terms_gate_proceed_label: "",
     terms_of_service_url: "",
     terms_privacy_policy_url: "",
+    financing_path_intro: "",
+    financing_path_troosolar_title: "",
+    financing_path_troosolar_description: "",
+    financing_path_partner_title: "",
+    financing_path_partner_description: "",
     newDownPaymentOption: "",
     newDuration: "",
   });
@@ -872,6 +877,11 @@ const BNPLBuyNow: React.FC = () => {
         terms_gate_proceed_label: String(bnplSettings.terms_gate?.proceed_label ?? bnplSettings.terms_gate_proceed_label ?? ""),
         terms_of_service_url: String(bnplSettings.terms_gate?.terms_url ?? bnplSettings.terms_of_service_url ?? ""),
         terms_privacy_policy_url: String(bnplSettings.terms_gate?.privacy_url ?? bnplSettings.terms_privacy_policy_url ?? ""),
+        financing_path_intro: String(bnplSettings.financing_path?.intro ?? bnplSettings.financing_path_intro ?? ""),
+        financing_path_troosolar_title: String(bnplSettings.financing_path?.troosolar_title ?? bnplSettings.financing_path_troosolar_title ?? ""),
+        financing_path_troosolar_description: String(bnplSettings.financing_path?.troosolar_description ?? bnplSettings.financing_path_troosolar_description ?? ""),
+        financing_path_partner_title: String(bnplSettings.financing_path?.partner_title ?? bnplSettings.financing_path_partner_title ?? ""),
+        financing_path_partner_description: String(bnplSettings.financing_path?.partner_description ?? bnplSettings.financing_path_partner_description ?? ""),
       }));
     }
   }, [activeTab, bnplSettings]);
@@ -2214,6 +2224,11 @@ const BNPLBuyNow: React.FC = () => {
                       terms_gate_proceed_label: loanSettingsForm.terms_gate_proceed_label || undefined,
                       terms_of_service_url: loanSettingsForm.terms_of_service_url || undefined,
                       terms_privacy_policy_url: loanSettingsForm.terms_privacy_policy_url || undefined,
+                      financing_path_intro: loanSettingsForm.financing_path_intro || undefined,
+                      financing_path_troosolar_title: loanSettingsForm.financing_path_troosolar_title || undefined,
+                      financing_path_troosolar_description: loanSettingsForm.financing_path_troosolar_description || undefined,
+                      financing_path_partner_title: loanSettingsForm.financing_path_partner_title || undefined,
+                      financing_path_partner_description: loanSettingsForm.financing_path_partner_description || undefined,
                     }, token);
                     queryClient.invalidateQueries({ queryKey: ["bnpl-settings"] });
                     alert("Loan settings saved successfully.");
@@ -2356,6 +2371,39 @@ const BNPLBuyNow: React.FC = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Privacy Policy URL</label>
                         <input type="url" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="https://troosolar.io/privacy-policy/" value={loanSettingsForm.terms_privacy_policy_url} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, terms_privacy_policy_url: e.target.value }))} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-gray-200 space-y-4">
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-900">Financing Path (customer choice)</h3>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Customers see exactly two options after the first loan calculator: Troosolar and Partner Financing. Edit the labels and descriptions shown on that step here (not the full partner bank list).
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Intro text</label>
+                      <textarea rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.financing_path_intro} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_intro: e.target.value }))} />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Troosolar title</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.financing_path_troosolar_title} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_troosolar_title: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Partner Financing title</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.financing_path_partner_title} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_partner_title: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Troosolar description</label>
+                        <textarea rows={3} className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.financing_path_troosolar_description} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_troosolar_description: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Partner Financing description</label>
+                        <textarea rows={3} className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.financing_path_partner_description} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_partner_description: e.target.value }))} />
                       </div>
                     </div>
                   </div>
