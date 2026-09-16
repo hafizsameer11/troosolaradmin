@@ -662,6 +662,21 @@ const BNPLBuyNow: React.FC = () => {
     finance_agreement_accept_label: "",
     finance_agreement_residential_text: "",
     finance_agreement_sme_text: "",
+    credit_check_intro: "",
+    credit_check_continue_label: "",
+    credit_check_unavailable_label: "",
+    credit_check_residential_auto_enabled: true,
+    credit_check_residential_auto_title: "",
+    credit_check_residential_auto_description: "",
+    credit_check_residential_manual_enabled: true,
+    credit_check_residential_manual_title: "",
+    credit_check_residential_manual_description: "",
+    credit_check_sme_auto_enabled: true,
+    credit_check_sme_auto_title: "",
+    credit_check_sme_auto_description: "",
+    credit_check_sme_manual_enabled: true,
+    credit_check_sme_manual_title: "",
+    credit_check_sme_manual_description: "",
     newDownPaymentOption: "",
     newDuration: "",
   });
@@ -915,6 +930,21 @@ const BNPLBuyNow: React.FC = () => {
         finance_agreement_accept_label: String(bnplSettings.finance_agreement?.accept_label ?? bnplSettings.finance_agreement_accept_label ?? ""),
         finance_agreement_residential_text: String(bnplSettings.finance_agreement?.residential_text ?? bnplSettings.finance_agreement_residential_text ?? ""),
         finance_agreement_sme_text: String(bnplSettings.finance_agreement?.sme_text ?? bnplSettings.finance_agreement_sme_text ?? ""),
+        credit_check_intro: String(bnplSettings.credit_check_method?.intro ?? bnplSettings.credit_check_intro ?? ""),
+        credit_check_continue_label: String(bnplSettings.credit_check_method?.continue_label ?? bnplSettings.credit_check_continue_label ?? ""),
+        credit_check_unavailable_label: String(bnplSettings.credit_check_method?.unavailable_label ?? bnplSettings.credit_check_unavailable_label ?? ""),
+        credit_check_residential_auto_enabled: bnplSettings.credit_check_method?.residential?.auto_enabled !== false,
+        credit_check_residential_auto_title: String(bnplSettings.credit_check_method?.residential?.auto_title ?? bnplSettings.credit_check_residential_auto_title ?? ""),
+        credit_check_residential_auto_description: String(bnplSettings.credit_check_method?.residential?.auto_description ?? bnplSettings.credit_check_residential_auto_description ?? ""),
+        credit_check_residential_manual_enabled: bnplSettings.credit_check_method?.residential?.manual_enabled !== false,
+        credit_check_residential_manual_title: String(bnplSettings.credit_check_method?.residential?.manual_title ?? bnplSettings.credit_check_residential_manual_title ?? ""),
+        credit_check_residential_manual_description: String(bnplSettings.credit_check_method?.residential?.manual_description ?? bnplSettings.credit_check_residential_manual_description ?? ""),
+        credit_check_sme_auto_enabled: bnplSettings.credit_check_method?.sme?.auto_enabled !== false,
+        credit_check_sme_auto_title: String(bnplSettings.credit_check_method?.sme?.auto_title ?? bnplSettings.credit_check_sme_auto_title ?? ""),
+        credit_check_sme_auto_description: String(bnplSettings.credit_check_method?.sme?.auto_description ?? bnplSettings.credit_check_sme_auto_description ?? ""),
+        credit_check_sme_manual_enabled: bnplSettings.credit_check_method?.sme?.manual_enabled !== false,
+        credit_check_sme_manual_title: String(bnplSettings.credit_check_method?.sme?.manual_title ?? bnplSettings.credit_check_sme_manual_title ?? ""),
+        credit_check_sme_manual_description: String(bnplSettings.credit_check_method?.sme?.manual_description ?? bnplSettings.credit_check_sme_manual_description ?? ""),
       }));
     }
   }, [activeTab, bnplSettings]);
@@ -2276,6 +2306,21 @@ const BNPLBuyNow: React.FC = () => {
                       finance_agreement_accept_label: loanSettingsForm.finance_agreement_accept_label || undefined,
                       finance_agreement_residential_text: loanSettingsForm.finance_agreement_residential_text || undefined,
                       finance_agreement_sme_text: loanSettingsForm.finance_agreement_sme_text || undefined,
+                      credit_check_intro: loanSettingsForm.credit_check_intro || undefined,
+                      credit_check_continue_label: loanSettingsForm.credit_check_continue_label || undefined,
+                      credit_check_unavailable_label: loanSettingsForm.credit_check_unavailable_label || undefined,
+                      credit_check_residential_auto_enabled: !!loanSettingsForm.credit_check_residential_auto_enabled,
+                      credit_check_residential_auto_title: loanSettingsForm.credit_check_residential_auto_title || undefined,
+                      credit_check_residential_auto_description: loanSettingsForm.credit_check_residential_auto_description || undefined,
+                      credit_check_residential_manual_enabled: !!loanSettingsForm.credit_check_residential_manual_enabled,
+                      credit_check_residential_manual_title: loanSettingsForm.credit_check_residential_manual_title || undefined,
+                      credit_check_residential_manual_description: loanSettingsForm.credit_check_residential_manual_description || undefined,
+                      credit_check_sme_auto_enabled: !!loanSettingsForm.credit_check_sme_auto_enabled,
+                      credit_check_sme_auto_title: loanSettingsForm.credit_check_sme_auto_title || undefined,
+                      credit_check_sme_auto_description: loanSettingsForm.credit_check_sme_auto_description || undefined,
+                      credit_check_sme_manual_enabled: !!loanSettingsForm.credit_check_sme_manual_enabled,
+                      credit_check_sme_manual_title: loanSettingsForm.credit_check_sme_manual_title || undefined,
+                      credit_check_sme_manual_description: loanSettingsForm.credit_check_sme_manual_description || undefined,
                     }, token);
                     queryClient.invalidateQueries({ queryKey: ["bnpl-settings"] });
                     alert("Loan settings saved successfully.");
@@ -2541,6 +2586,61 @@ const BNPLBuyNow: React.FC = () => {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">SME agreement text</label>
                       <textarea rows={10} className="w-full border border-gray-300 rounded-lg px-3 py-2 font-mono text-sm" value={loanSettingsForm.finance_agreement_sme_text} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, finance_agreement_sme_text: e.target.value }))} />
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-gray-200 space-y-4">
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-900">Credit check method cards</h3>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Edit titles/descriptions for Connect bank and Manual review. Separate copy for Residential and SME. Disable an option to keep it visible but not selectable.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Intro text</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.credit_check_intro} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_intro: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Continue button</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.credit_check_continue_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_continue_label: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Unavailable badge</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Currently unavailable" value={loanSettingsForm.credit_check_unavailable_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_unavailable_label: e.target.value }))} />
+                      </div>
+                    </div>
+
+                    <div className="border rounded-lg p-4 space-y-3 bg-gray-50">
+                      <h4 className="font-semibold text-gray-900">Residential / Individual</h4>
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input type="checkbox" className="h-4 w-4" checked={!!loanSettingsForm.credit_check_residential_auto_enabled} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_residential_auto_enabled: e.target.checked }))} />
+                        Enable Connect your bank
+                      </label>
+                      <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Connect your bank (Recommended)" value={loanSettingsForm.credit_check_residential_auto_title} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_residential_auto_title: e.target.value }))} />
+                      <textarea rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Auto method description" value={loanSettingsForm.credit_check_residential_auto_description} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_residential_auto_description: e.target.value }))} />
+                      <label className="flex items-center gap-2 text-sm cursor-pointer pt-2">
+                        <input type="checkbox" className="h-4 w-4" checked={!!loanSettingsForm.credit_check_residential_manual_enabled} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_residential_manual_enabled: e.target.checked }))} />
+                        Enable Manual review
+                      </label>
+                      <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Manual review" value={loanSettingsForm.credit_check_residential_manual_title} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_residential_manual_title: e.target.value }))} />
+                      <textarea rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Manual method description" value={loanSettingsForm.credit_check_residential_manual_description} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_residential_manual_description: e.target.value }))} />
+                    </div>
+
+                    <div className="border rounded-lg p-4 space-y-3 bg-gray-50">
+                      <h4 className="font-semibold text-gray-900">SME</h4>
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input type="checkbox" className="h-4 w-4" checked={!!loanSettingsForm.credit_check_sme_auto_enabled} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_auto_enabled: e.target.checked }))} />
+                        Enable Connect your bank
+                      </label>
+                      <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Connect your bank (Recommended)" value={loanSettingsForm.credit_check_sme_auto_title} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_auto_title: e.target.value }))} />
+                      <textarea rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Auto method description" value={loanSettingsForm.credit_check_sme_auto_description} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_auto_description: e.target.value }))} />
+                      <label className="flex items-center gap-2 text-sm cursor-pointer pt-2">
+                        <input type="checkbox" className="h-4 w-4" checked={!!loanSettingsForm.credit_check_sme_manual_enabled} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_manual_enabled: e.target.checked }))} />
+                        Enable Manual review
+                      </label>
+                      <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Manual review" value={loanSettingsForm.credit_check_sme_manual_title} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_manual_title: e.target.value }))} />
+                      <textarea rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Manual method description" value={loanSettingsForm.credit_check_sme_manual_description} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_manual_description: e.target.value }))} />
                     </div>
                   </div>
                 </div>

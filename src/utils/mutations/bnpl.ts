@@ -163,6 +163,21 @@ export const updateBNPLSettings = async (
     finance_agreement_accept_label?: string;
     finance_agreement_residential_text?: string;
     finance_agreement_sme_text?: string;
+    credit_check_intro?: string;
+    credit_check_continue_label?: string;
+    credit_check_unavailable_label?: string;
+    credit_check_residential_auto_enabled?: boolean;
+    credit_check_residential_auto_title?: string;
+    credit_check_residential_auto_description?: string;
+    credit_check_residential_manual_enabled?: boolean;
+    credit_check_residential_manual_title?: string;
+    credit_check_residential_manual_description?: string;
+    credit_check_sme_auto_enabled?: boolean;
+    credit_check_sme_auto_title?: string;
+    credit_check_sme_auto_description?: string;
+    credit_check_sme_manual_enabled?: boolean;
+    credit_check_sme_manual_title?: string;
+    credit_check_sme_manual_description?: string;
   },
   token: string
 ): Promise<{ status: string; data?: any; message: string }> => {
