@@ -652,6 +652,13 @@ const BNPLBuyNow: React.FC = () => {
     financing_path_back_label: "",
     financing_path_continue_troosolar_label: "",
     financing_path_continue_partner_label: "",
+    finance_agreement_modal_title: "",
+    finance_agreement_checkbox_prefix: "",
+    finance_agreement_link_label: "",
+    finance_agreement_close_label: "",
+    finance_agreement_accept_label: "",
+    finance_agreement_residential_text: "",
+    finance_agreement_sme_text: "",
     newDownPaymentOption: "",
     newDuration: "",
   });
@@ -895,6 +902,13 @@ const BNPLBuyNow: React.FC = () => {
         financing_path_back_label: String(bnplSettings.financing_path?.back_label ?? bnplSettings.financing_path_back_label ?? ""),
         financing_path_continue_troosolar_label: String(bnplSettings.financing_path?.continue_troosolar_label ?? bnplSettings.financing_path_continue_troosolar_label ?? ""),
         financing_path_continue_partner_label: String(bnplSettings.financing_path?.continue_partner_label ?? bnplSettings.financing_path_continue_partner_label ?? ""),
+        finance_agreement_modal_title: String(bnplSettings.finance_agreement?.modal_title ?? bnplSettings.finance_agreement_modal_title ?? ""),
+        finance_agreement_checkbox_prefix: String(bnplSettings.finance_agreement?.checkbox_prefix ?? bnplSettings.finance_agreement_checkbox_prefix ?? ""),
+        finance_agreement_link_label: String(bnplSettings.finance_agreement?.link_label ?? bnplSettings.finance_agreement_link_label ?? ""),
+        finance_agreement_close_label: String(bnplSettings.finance_agreement?.close_label ?? bnplSettings.finance_agreement_close_label ?? ""),
+        finance_agreement_accept_label: String(bnplSettings.finance_agreement?.accept_label ?? bnplSettings.finance_agreement_accept_label ?? ""),
+        finance_agreement_residential_text: String(bnplSettings.finance_agreement?.residential_text ?? bnplSettings.finance_agreement_residential_text ?? ""),
+        finance_agreement_sme_text: String(bnplSettings.finance_agreement?.sme_text ?? bnplSettings.finance_agreement_sme_text ?? ""),
       }));
     }
   }, [activeTab, bnplSettings]);
@@ -2246,6 +2260,13 @@ const BNPLBuyNow: React.FC = () => {
                       financing_path_back_label: loanSettingsForm.financing_path_back_label || undefined,
                       financing_path_continue_troosolar_label: loanSettingsForm.financing_path_continue_troosolar_label || undefined,
                       financing_path_continue_partner_label: loanSettingsForm.financing_path_continue_partner_label || undefined,
+                      finance_agreement_modal_title: loanSettingsForm.finance_agreement_modal_title || undefined,
+                      finance_agreement_checkbox_prefix: loanSettingsForm.finance_agreement_checkbox_prefix || undefined,
+                      finance_agreement_link_label: loanSettingsForm.finance_agreement_link_label || undefined,
+                      finance_agreement_close_label: loanSettingsForm.finance_agreement_close_label || undefined,
+                      finance_agreement_accept_label: loanSettingsForm.finance_agreement_accept_label || undefined,
+                      finance_agreement_residential_text: loanSettingsForm.finance_agreement_residential_text || undefined,
+                      finance_agreement_sme_text: loanSettingsForm.finance_agreement_sme_text || undefined,
                     }, token);
                     queryClient.invalidateQueries({ queryKey: ["bnpl-settings"] });
                     alert("Loan settings saved successfully.");
@@ -2442,6 +2463,45 @@ const BNPLBuyNow: React.FC = () => {
                         <label className="block text-sm font-medium text-gray-700 mb-1">Continue button (Partner selected)</label>
                         <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Continue to Final Application" value={loanSettingsForm.financing_path_continue_partner_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_continue_partner_label: e.target.value }))} />
                       </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-gray-200 space-y-4">
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-900">Finance Agreement modal</h3>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Edit every label and the full agreement body shown on Final Application. Residential and SME each have their own text.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Modal title</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Finance Agreement" value={loanSettingsForm.finance_agreement_modal_title} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, finance_agreement_modal_title: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Link label (in checkbox)</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Finance Agreement" value={loanSettingsForm.finance_agreement_link_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, finance_agreement_link_label: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Checkbox prefix</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="I accept the" value={loanSettingsForm.finance_agreement_checkbox_prefix} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, finance_agreement_checkbox_prefix: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Close button</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Close" value={loanSettingsForm.finance_agreement_close_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, finance_agreement_close_label: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Accept button</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="I Accept" value={loanSettingsForm.finance_agreement_accept_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, finance_agreement_accept_label: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Residential / Individual agreement text</label>
+                      <textarea rows={8} className="w-full border border-gray-300 rounded-lg px-3 py-2 font-mono text-sm" value={loanSettingsForm.finance_agreement_residential_text} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, finance_agreement_residential_text: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">SME agreement text</label>
+                      <textarea rows={10} className="w-full border border-gray-300 rounded-lg px-3 py-2 font-mono text-sm" value={loanSettingsForm.finance_agreement_sme_text} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, finance_agreement_sme_text: e.target.value }))} />
                     </div>
                   </div>
                 </div>

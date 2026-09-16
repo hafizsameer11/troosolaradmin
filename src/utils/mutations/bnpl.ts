@@ -153,6 +153,13 @@ export const updateBNPLSettings = async (
     financing_path_back_label?: string;
     financing_path_continue_troosolar_label?: string;
     financing_path_continue_partner_label?: string;
+    finance_agreement_modal_title?: string;
+    finance_agreement_checkbox_prefix?: string;
+    finance_agreement_link_label?: string;
+    finance_agreement_close_label?: string;
+    finance_agreement_accept_label?: string;
+    finance_agreement_residential_text?: string;
+    finance_agreement_sme_text?: string;
   },
   token: string
 ): Promise<{ status: string; data?: any; message: string }> => {
