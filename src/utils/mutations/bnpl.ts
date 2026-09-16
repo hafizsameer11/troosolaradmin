@@ -153,6 +153,9 @@ export const updateBNPLSettings = async (
     financing_path_back_label?: string;
     financing_path_continue_troosolar_label?: string;
     financing_path_continue_partner_label?: string;
+    financing_path_troosolar_enabled?: boolean;
+    financing_path_partner_enabled?: boolean;
+    financing_path_unavailable_label?: string;
     finance_agreement_modal_title?: string;
     finance_agreement_checkbox_prefix?: string;
     finance_agreement_link_label?: string;

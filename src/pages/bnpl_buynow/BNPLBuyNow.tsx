@@ -652,6 +652,9 @@ const BNPLBuyNow: React.FC = () => {
     financing_path_back_label: "",
     financing_path_continue_troosolar_label: "",
     financing_path_continue_partner_label: "",
+    financing_path_troosolar_enabled: true,
+    financing_path_partner_enabled: true,
+    financing_path_unavailable_label: "",
     finance_agreement_modal_title: "",
     finance_agreement_checkbox_prefix: "",
     finance_agreement_link_label: "",
@@ -902,6 +905,9 @@ const BNPLBuyNow: React.FC = () => {
         financing_path_back_label: String(bnplSettings.financing_path?.back_label ?? bnplSettings.financing_path_back_label ?? ""),
         financing_path_continue_troosolar_label: String(bnplSettings.financing_path?.continue_troosolar_label ?? bnplSettings.financing_path_continue_troosolar_label ?? ""),
         financing_path_continue_partner_label: String(bnplSettings.financing_path?.continue_partner_label ?? bnplSettings.financing_path_continue_partner_label ?? ""),
+        financing_path_troosolar_enabled: bnplSettings.financing_path?.troosolar_enabled !== false && bnplSettings.financing_path_troosolar_enabled !== false,
+        financing_path_partner_enabled: bnplSettings.financing_path?.partner_enabled !== false && bnplSettings.financing_path_partner_enabled !== false,
+        financing_path_unavailable_label: String(bnplSettings.financing_path?.unavailable_label ?? bnplSettings.financing_path_unavailable_label ?? ""),
         finance_agreement_modal_title: String(bnplSettings.finance_agreement?.modal_title ?? bnplSettings.finance_agreement_modal_title ?? ""),
         finance_agreement_checkbox_prefix: String(bnplSettings.finance_agreement?.checkbox_prefix ?? bnplSettings.finance_agreement_checkbox_prefix ?? ""),
         finance_agreement_link_label: String(bnplSettings.finance_agreement?.link_label ?? bnplSettings.finance_agreement_link_label ?? ""),
@@ -2260,6 +2266,9 @@ const BNPLBuyNow: React.FC = () => {
                       financing_path_back_label: loanSettingsForm.financing_path_back_label || undefined,
                       financing_path_continue_troosolar_label: loanSettingsForm.financing_path_continue_troosolar_label || undefined,
                       financing_path_continue_partner_label: loanSettingsForm.financing_path_continue_partner_label || undefined,
+                      financing_path_troosolar_enabled: !!loanSettingsForm.financing_path_troosolar_enabled,
+                      financing_path_partner_enabled: !!loanSettingsForm.financing_path_partner_enabled,
+                      financing_path_unavailable_label: loanSettingsForm.financing_path_unavailable_label || undefined,
                       finance_agreement_modal_title: loanSettingsForm.finance_agreement_modal_title || undefined,
                       finance_agreement_checkbox_prefix: loanSettingsForm.finance_agreement_checkbox_prefix || undefined,
                       finance_agreement_link_label: loanSettingsForm.finance_agreement_link_label || undefined,
@@ -2443,6 +2452,36 @@ const BNPLBuyNow: React.FC = () => {
                         <label className="block text-sm font-medium text-gray-700 mb-1">Partner Financing title</label>
                         <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Partner Financing" value={loanSettingsForm.financing_path_partner_title} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_partner_title: e.target.value }))} />
                       </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={!!loanSettingsForm.financing_path_troosolar_enabled}
+                          onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_troosolar_enabled: e.target.checked }))}
+                        />
+                        <span className="text-sm text-gray-800">
+                          <span className="font-medium">Enable Troosolar selection</span>
+                          <span className="block text-xs text-gray-500">If off, customers still see Troosolar but cannot select it.</span>
+                        </span>
+                      </label>
+                      <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={!!loanSettingsForm.financing_path_partner_enabled}
+                          onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_partner_enabled: e.target.checked }))}
+                        />
+                        <span className="text-sm text-gray-800">
+                          <span className="font-medium">Enable Partner Financing selection</span>
+                          <span className="block text-xs text-gray-500">If off, customers still see Partner Financing but cannot select it.</span>
+                        </span>
+                      </label>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Unavailable badge text</label>
+                      <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Currently unavailable" value={loanSettingsForm.financing_path_unavailable_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_unavailable_label: e.target.value }))} />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
