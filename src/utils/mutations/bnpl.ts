@@ -149,6 +149,10 @@ export const updateBNPLSettings = async (
     financing_path_troosolar_description?: string;
     financing_path_partner_title?: string;
     financing_path_partner_description?: string;
+    financing_path_title?: string;
+    financing_path_back_label?: string;
+    financing_path_continue_troosolar_label?: string;
+    financing_path_continue_partner_label?: string;
   },
   token: string
 ): Promise<{ status: string; data?: any; message: string }> => {

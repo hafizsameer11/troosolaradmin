@@ -648,6 +648,10 @@ const BNPLBuyNow: React.FC = () => {
     financing_path_troosolar_description: "",
     financing_path_partner_title: "",
     financing_path_partner_description: "",
+    financing_path_title: "",
+    financing_path_back_label: "",
+    financing_path_continue_troosolar_label: "",
+    financing_path_continue_partner_label: "",
     newDownPaymentOption: "",
     newDuration: "",
   });
@@ -882,6 +886,10 @@ const BNPLBuyNow: React.FC = () => {
         financing_path_troosolar_description: String(bnplSettings.financing_path?.troosolar_description ?? bnplSettings.financing_path_troosolar_description ?? ""),
         financing_path_partner_title: String(bnplSettings.financing_path?.partner_title ?? bnplSettings.financing_path_partner_title ?? ""),
         financing_path_partner_description: String(bnplSettings.financing_path?.partner_description ?? bnplSettings.financing_path_partner_description ?? ""),
+        financing_path_title: String(bnplSettings.financing_path?.title ?? bnplSettings.financing_path_title ?? ""),
+        financing_path_back_label: String(bnplSettings.financing_path?.back_label ?? bnplSettings.financing_path_back_label ?? ""),
+        financing_path_continue_troosolar_label: String(bnplSettings.financing_path?.continue_troosolar_label ?? bnplSettings.financing_path_continue_troosolar_label ?? ""),
+        financing_path_continue_partner_label: String(bnplSettings.financing_path?.continue_partner_label ?? bnplSettings.financing_path_continue_partner_label ?? ""),
       }));
     }
   }, [activeTab, bnplSettings]);
@@ -2229,6 +2237,10 @@ const BNPLBuyNow: React.FC = () => {
                       financing_path_troosolar_description: loanSettingsForm.financing_path_troosolar_description || undefined,
                       financing_path_partner_title: loanSettingsForm.financing_path_partner_title || undefined,
                       financing_path_partner_description: loanSettingsForm.financing_path_partner_description || undefined,
+                      financing_path_title: loanSettingsForm.financing_path_title || undefined,
+                      financing_path_back_label: loanSettingsForm.financing_path_back_label || undefined,
+                      financing_path_continue_troosolar_label: loanSettingsForm.financing_path_continue_troosolar_label || undefined,
+                      financing_path_continue_partner_label: loanSettingsForm.financing_path_continue_partner_label || undefined,
                     }, token);
                     queryClient.invalidateQueries({ queryKey: ["bnpl-settings"] });
                     alert("Loan settings saved successfully.");
@@ -2377,14 +2389,24 @@ const BNPLBuyNow: React.FC = () => {
 
                   <div className="pt-4 border-t border-gray-200 space-y-4">
                     <div>
-                      <h3 className="text-base font-semibold text-gray-900">Financing Path (customer choice)</h3>
+                      <h3 className="text-base font-semibold text-gray-900">Financing Path page (all customer text)</h3>
                       <p className="text-xs text-gray-500 mt-1">
-                        Customers see exactly two options after the first loan calculator: Troosolar and Partner Financing. Edit the labels and descriptions shown on that step here (not the full partner bank list).
+                        Customers always see exactly two options: Troosolar and Partner Financing. Every label on that page is edited here.
                       </p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Page title</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Financing Path" value={loanSettingsForm.financing_path_title} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_title: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Back button label</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Back" value={loanSettingsForm.financing_path_back_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_back_label: e.target.value }))} />
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Intro text</label>
-                      <textarea rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.financing_path_intro} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_intro: e.target.value }))} />
+                      <textarea rows={3} className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.financing_path_intro} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_intro: e.target.value }))} />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
@@ -2393,7 +2415,7 @@ const BNPLBuyNow: React.FC = () => {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Partner Financing title</label>
-                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.financing_path_partner_title} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_partner_title: e.target.value }))} />
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Partner Financing" value={loanSettingsForm.financing_path_partner_title} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_partner_title: e.target.value }))} />
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2404,6 +2426,16 @@ const BNPLBuyNow: React.FC = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Partner Financing description</label>
                         <textarea rows={3} className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.financing_path_partner_description} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_partner_description: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Continue button (Troosolar selected)</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Continue to Full Loan Plan" value={loanSettingsForm.financing_path_continue_troosolar_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_continue_troosolar_label: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Continue button (Partner selected)</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Continue to Final Application" value={loanSettingsForm.financing_path_continue_partner_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, financing_path_continue_partner_label: e.target.value }))} />
                       </div>
                     </div>
                   </div>
