@@ -681,6 +681,19 @@ const BNPLBuyNow: React.FC = () => {
     newDuration: "",
   });
   const [savingLoanSettings, setSavingLoanSettings] = useState(false);
+  const [loanSettingsSubTab, setLoanSettingsSubTab] = useState<
+    "calculator" | "terms" | "financing" | "agreement" | "credit"
+  >("calculator");
+  const loanSettingsSubTabs: Array<{
+    id: "calculator" | "terms" | "financing" | "agreement" | "credit";
+    label: string;
+  }> = [
+    { id: "calculator", label: "Loan Calculator" },
+    { id: "terms", label: "Terms Gate" },
+    { id: "financing", label: "Financing Path" },
+    { id: "agreement", label: "Finance Agreement" },
+    { id: "credit", label: "Credit Check" },
+  ];
   const [filterUserId, setFilterUserId] = useState<number | null>(null);
   const urlParamsHandled = useRef(false);
 
@@ -2254,10 +2267,10 @@ const BNPLBuyNow: React.FC = () => {
 
         {/* Loan Settings Tab Content - Global BNPL config */}
         {activeTab === "Loan Settings" ? (
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 max-w-3xl">
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 max-w-4xl">
             <h2 className="text-xl font-bold text-gray-900 mb-2">BNPL Loan Settings</h2>
-            <p className="text-sm text-gray-600 mb-6">
-              Configure default interest rate, minimum down payment %, fees, minimum loan amount, and allowed loan durations. These apply to new applications unless overridden per application in View Detail.
+            <p className="text-sm text-gray-600 mb-4">
+              Configure BNPL calculator, customer copy, and credit-check options. Use the tabs below — Save applies all settings.
             </p>
             {bnplSettingsLoading ? (
               <LoadingSpinner message="Loading settings..." />
@@ -2332,101 +2345,125 @@ const BNPLBuyNow: React.FC = () => {
                 }}
                 className="space-y-4"
               >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Interest rate (% per month)</label>
-                    <input type="number" step="0.01" min="0" max="100" className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.interest_rate_percentage} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, interest_rate_percentage: e.target.value }))} />
-                    <p className="text-xs text-gray-500 mt-1">Applied on the customer Loan Calculator breakdown. Total interest = loan amount × rate × tenor months.</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Minimum down options (%)</label>
-                    <p className="text-xs text-gray-500 mb-2">Add allowed down-payment percentages. The minimum is picked automatically from your list.</p>
-                    <div className="flex flex-wrap gap-2 items-center">
-                      {loanSettingsForm.down_payment_options.map((p) => (
-                        <span key={p} className="inline-flex items-center px-3 py-1 rounded-full bg-[#273E8E] text-white text-sm">
-                          {p}%
-                          <button type="button" className="ml-2 hover:opacity-80" onClick={() => setLoanSettingsForm((f) => {
-                            const next = f.down_payment_options.filter((v) => v !== p);
-                            return { ...f, down_payment_options: next, min_down_percentage: next.length ? String(Math.min(...next)) : "" };
-                          })}>×</button>
-                        </span>
-                      ))}
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          placeholder="e.g. 30"
-                          className="w-24 border border-gray-300 rounded-lg px-2 py-1 text-sm"
-                          value={loanSettingsForm.newDownPaymentOption}
-                          onChange={(e) => setLoanSettingsForm((f) => ({ ...f, newDownPaymentOption: e.target.value }))}
-                        />
-                        <button
-                          type="button"
-                          className="px-3 py-1 bg-gray-200 rounded-lg text-sm hover:bg-gray-300"
-                          onClick={() => {
-                            const n = Number(loanSettingsForm.newDownPaymentOption);
-                            if (Number.isNaN(n) || n < 0 || n > 100) return;
-                            setLoanSettingsForm((f) => {
-                              if (f.down_payment_options.includes(n)) return { ...f, newDownPaymentOption: "" };
-                              const next = [...f.down_payment_options, n].sort((a, b) => a - b);
-                              return {
-                                ...f,
-                                down_payment_options: next,
-                                min_down_percentage: String(Math.min(...next)),
-                                newDownPaymentOption: "",
-                              };
-                            });
-                          }}
-                        >
-                          Add
-                        </button>
+                <div className="border-b border-gray-200 mb-2">
+                  <nav className="-mb-px flex flex-wrap gap-1">
+                    {loanSettingsSubTabs.map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setLoanSettingsSubTab(tab.id)}
+                        className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                          loanSettingsSubTab === tab.id
+                            ? "border-[#273E8E] text-[#273E8E]"
+                            : "border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-300"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </nav>
+                </div>
+
+                {loanSettingsSubTab === "calculator" && (
+                  <div className="space-y-4">
+                    <p className="text-sm text-gray-600">Interest, deposits, fees, minimum loan, and tenors for the customer calculator.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Interest rate (% per month)</label>
+                        <input type="number" step="0.01" min="0" max="100" className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.interest_rate_percentage} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, interest_rate_percentage: e.target.value }))} />
+                        <p className="text-xs text-gray-500 mt-1">Applied on the customer Loan Calculator breakdown. Total interest = loan amount × rate × tenor months.</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Minimum down options (%)</label>
+                        <p className="text-xs text-gray-500 mb-2">Add allowed down-payment percentages. The minimum is picked automatically from your list.</p>
+                        <div className="flex flex-wrap gap-2 items-center">
+                          {loanSettingsForm.down_payment_options.map((p) => (
+                            <span key={p} className="inline-flex items-center px-3 py-1 rounded-full bg-[#273E8E] text-white text-sm">
+                              {p}%
+                              <button type="button" className="ml-2 hover:opacity-80" onClick={() => setLoanSettingsForm((f) => {
+                                const next = f.down_payment_options.filter((v) => v !== p);
+                                return { ...f, down_payment_options: next, min_down_percentage: next.length ? String(Math.min(...next)) : "" };
+                              })}>×</button>
+                            </span>
+                          ))}
+                          <div className="flex gap-2">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.01"
+                              placeholder="e.g. 30"
+                              className="w-24 border border-gray-300 rounded-lg px-2 py-1 text-sm"
+                              value={loanSettingsForm.newDownPaymentOption}
+                              onChange={(e) => setLoanSettingsForm((f) => ({ ...f, newDownPaymentOption: e.target.value }))}
+                            />
+                            <button
+                              type="button"
+                              className="px-3 py-1 bg-gray-200 rounded-lg text-sm hover:bg-gray-300"
+                              onClick={() => {
+                                const n = Number(loanSettingsForm.newDownPaymentOption);
+                                if (Number.isNaN(n) || n < 0 || n > 100) return;
+                                setLoanSettingsForm((f) => {
+                                  if (f.down_payment_options.includes(n)) return { ...f, newDownPaymentOption: "" };
+                                  const next = [...f.down_payment_options, n].sort((a, b) => a - b);
+                                  return {
+                                    ...f,
+                                    down_payment_options: next,
+                                    min_down_percentage: String(Math.min(...next)),
+                                    newDownPaymentOption: "",
+                                  };
+                                });
+                              }}
+                            >
+                              Add
+                            </button>
+                          </div>
+                        </div>
+                        {loanSettingsForm.down_payment_options.length > 0 && (
+                          <p className="text-xs text-gray-500 mt-2">Minimum down (auto): {Math.min(...loanSettingsForm.down_payment_options)}%</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Management fee (%)</label>
+                        <input type="number" step="0.01" min="0" max="100" className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.management_fee_percentage} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, management_fee_percentage: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Legal fee (%)</label>
+                        <input type="number" step="0.01" min="0" max="100" className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.legal_fee_percentage} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, legal_fee_percentage: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Insurance fee (%)</label>
+                        <input type="number" step="0.01" min="0" max="100" className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.insurance_fee_percentage} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, insurance_fee_percentage: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Minimum loan amount (₦)</label>
+                        <input type="number" min="0" step="1000" className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.minimum_loan_amount} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, minimum_loan_amount: e.target.value }))} />
                       </div>
                     </div>
-                    {loanSettingsForm.down_payment_options.length > 0 && (
-                      <p className="text-xs text-gray-500 mt-2">Minimum down (auto): {Math.min(...loanSettingsForm.down_payment_options)}%</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Management fee (%)</label>
-                    <input type="number" step="0.01" min="0" max="100" className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.management_fee_percentage} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, management_fee_percentage: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Legal fee (%)</label>
-                    <input type="number" step="0.01" min="0" max="100" className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.legal_fee_percentage} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, legal_fee_percentage: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Insurance fee (%)</label>
-                    <input type="number" step="0.01" min="0" max="100" className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.insurance_fee_percentage} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, insurance_fee_percentage: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Minimum loan amount (₦)</label>
-                    <input type="number" min="0" step="1000" className="w-full border border-gray-300 rounded-lg px-3 py-2" value={loanSettingsForm.minimum_loan_amount} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, minimum_loan_amount: e.target.value }))} />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Loan durations (months)</label>
-                  <p className="text-xs text-gray-500 mb-2">Add allowed tenors e.g. 3, 6, 9, 12. Admin can add more (e.g. 18, 24).</p>
-                  <div className="flex flex-wrap gap-2 items-center">
-                    {loanSettingsForm.loan_durations.map((m) => (
-                      <span key={m} className="inline-flex items-center px-3 py-1 rounded-full bg-[#273E8E] text-white text-sm">
-                        {m} months
-                        <button type="button" className="ml-2 hover:opacity-80" onClick={() => setLoanSettingsForm((f) => ({ ...f, loan_durations: f.loan_durations.filter((d) => d !== m) }))}>×</button>
-                      </span>
-                    ))}
-                    <div className="flex gap-2">
-                      <input type="number" min="1" max="120" placeholder="e.g. 18" className="w-20 border border-gray-300 rounded-lg px-2 py-1 text-sm" value={loanSettingsForm.newDuration} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, newDuration: e.target.value }))} />
-                      <button type="button" className="px-3 py-1 bg-gray-200 rounded-lg text-sm hover:bg-gray-300" onClick={() => { const n = parseInt(loanSettingsForm.newDuration, 10); if (!isNaN(n) && n >= 1 && n <= 120 && !loanSettingsForm.loan_durations.includes(n)) { setLoanSettingsForm((f) => ({ ...f, loan_durations: [...f.loan_durations, n].sort((a, b) => a - b), newDuration: "" })); } }}>Add</button>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Loan durations (months)</label>
+                      <p className="text-xs text-gray-500 mb-2">Add allowed tenors e.g. 3, 6, 9, 12. Admin can add more (e.g. 18, 24).</p>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        {loanSettingsForm.loan_durations.map((m) => (
+                          <span key={m} className="inline-flex items-center px-3 py-1 rounded-full bg-[#273E8E] text-white text-sm">
+                            {m} months
+                            <button type="button" className="ml-2 hover:opacity-80" onClick={() => setLoanSettingsForm((f) => ({ ...f, loan_durations: f.loan_durations.filter((d) => d !== m) }))}>×</button>
+                          </span>
+                        ))}
+                        <div className="flex gap-2">
+                          <input type="number" min="1" max="120" placeholder="e.g. 18" className="w-20 border border-gray-300 rounded-lg px-2 py-1 text-sm" value={loanSettingsForm.newDuration} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, newDuration: e.target.value }))} />
+                          <button type="button" className="px-3 py-1 bg-gray-200 rounded-lg text-sm hover:bg-gray-300" onClick={() => { const n = parseInt(loanSettingsForm.newDuration, 10); if (!isNaN(n) && n >= 1 && n <= 120 && !loanSettingsForm.loan_durations.includes(n)) { setLoanSettingsForm((f) => ({ ...f, loan_durations: [...f.loan_durations, n].sort((a, b) => a - b), newDuration: "" })); } }}>Add</button>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="border-t border-gray-200 pt-6 mt-2">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">BNPL Terms Gate</h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Copy shown on the Terms of Use Agreement screen before users start a BNPL application. Leave blank to use defaults.
-                  </p>
-                  <div className="grid grid-cols-1 gap-4">
+                )}
+
+                {loanSettingsSubTab === "terms" && (
+                  <div className="space-y-4">
+                    <p className="text-sm text-gray-600">
+                      Copy shown on the Terms of Use Agreement screen before users start a BNPL application. Leave blank to use defaults.
+                    </p>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
                       <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Terms of Use Agreement" value={loanSettingsForm.terms_gate_title} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, terms_gate_title: e.target.value }))} />
@@ -2466,14 +2503,13 @@ const BNPLBuyNow: React.FC = () => {
                       </div>
                     </div>
                   </div>
+                )}
 
-                  <div className="pt-4 border-t border-gray-200 space-y-4">
-                    <div>
-                      <h3 className="text-base font-semibold text-gray-900">Financing Path page (all customer text)</h3>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Customers always see exactly two options: Troosolar and Partner Financing. Every label on that page is edited here.
-                      </p>
-                    </div>
+                {loanSettingsSubTab === "financing" && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-gray-500">
+                      Customers always see exactly two options: Troosolar and Partner Financing. Every label on that page is edited here.
+                    </p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Page title</label>
@@ -2549,14 +2585,13 @@ const BNPLBuyNow: React.FC = () => {
                       </div>
                     </div>
                   </div>
+                )}
 
-                  <div className="pt-4 border-t border-gray-200 space-y-4">
-                    <div>
-                      <h3 className="text-base font-semibold text-gray-900">Finance Agreement modal</h3>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Edit every label and the full agreement body shown on Final Application. Residential and SME each have their own text.
-                      </p>
-                    </div>
+                {loanSettingsSubTab === "agreement" && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-gray-500">
+                      Edit every label and the full agreement body shown on Final Application. Residential and SME each have their own text.
+                    </p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Modal title</label>
@@ -2588,14 +2623,13 @@ const BNPLBuyNow: React.FC = () => {
                       <textarea rows={10} className="w-full border border-gray-300 rounded-lg px-3 py-2 font-mono text-sm" value={loanSettingsForm.finance_agreement_sme_text} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, finance_agreement_sme_text: e.target.value }))} />
                     </div>
                   </div>
+                )}
 
-                  <div className="pt-4 border-t border-gray-200 space-y-4">
-                    <div>
-                      <h3 className="text-base font-semibold text-gray-900">Credit check method cards</h3>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Edit titles/descriptions for Connect bank and Manual review. Separate copy for Residential and SME. Disable an option to keep it visible but not selectable.
-                      </p>
-                    </div>
+                {loanSettingsSubTab === "credit" && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-gray-500">
+                      Edit titles/descriptions for Connect bank and Manual review. Separate copy for Residential and SME. Disable an option to keep it visible but not selectable.
+                    </p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-1">Intro text</label>
@@ -2643,10 +2677,13 @@ const BNPLBuyNow: React.FC = () => {
                       <textarea rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Manual method description" value={loanSettingsForm.credit_check_sme_manual_description} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_manual_description: e.target.value }))} />
                     </div>
                   </div>
+                )}
+
+                <div className="pt-4 border-t border-gray-200 flex justify-end">
+                  <button type="submit" disabled={savingLoanSettings} className="bg-[#273E8E] hover:bg-[#1e3270] disabled:opacity-50 text-white px-6 py-3 rounded-lg font-medium">
+                    {savingLoanSettings ? "Saving..." : "Save Loan Settings"}
+                  </button>
                 </div>
-                <button type="submit" disabled={savingLoanSettings} className="bg-[#273E8E] hover:bg-[#1e3270] disabled:opacity-50 text-white px-6 py-3 rounded-lg font-medium">
-                  {savingLoanSettings ? "Saving..." : "Save Loan Settings"}
-                </button>
               </form>
             )}
           </div>
