@@ -47,7 +47,11 @@ export const distributeLoan = async (
 //POST /admin/send-to-partner/{id}
 export const sendToPartnerDetail = async (
   id: number | string,
-  payload: { partner_id: number; loan_application_id?: number },
+  payload: {
+    partner_id?: number;
+    partner_ids?: number[];
+    loan_application_id?: number;
+  },
   token: string
 ): Promise<any> => {
   return await apiCall(

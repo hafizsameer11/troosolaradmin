@@ -573,7 +573,7 @@ const BNPLBuyNow: React.FC = () => {
   const [savingInstallationReject, setSavingInstallationReject] = useState(false);
   // Send to Partner (like loan flow - before approving)
   const [showSendToPartnerModal, setShowSendToPartnerModal] = useState(false);
-  const [selectedPartnerIdForSend, setSelectedPartnerIdForSend] = useState<number | "">("");
+  const [selectedPartnerIdsForSend, setSelectedPartnerIdsForSend] = useState<number[]>([]);
   const [sendingToPartner, setSendingToPartner] = useState(false);
   
   // Custom Orders state
@@ -835,6 +835,11 @@ const BNPLBuyNow: React.FC = () => {
     enabled: (showSendToPartnerModal && !!token) || !!token,
   });
   const financePartnersList = Array.isArray(financePartnersData?.data) ? financePartnersData.data : [];
+  const sendableFinancePartners = financePartnersList.filter((partner: any) => {
+    const slug = String(partner?.slug || "").toLowerCase();
+    const name = String(partner?.["Partner name"] ?? partner?.name ?? "").toLowerCase();
+    return !(partner?.is_troosolar || slug === "troosolar" || name === "troosolar");
+  });
 
   // BNPL global settings (for Loan Settings tab and for detail modal duration dropdown)
   const { data: bnplSettingsData, isLoading: bnplSettingsLoading } = useQuery({
@@ -5281,7 +5286,7 @@ const BNPLBuyNow: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          setSelectedPartnerIdForSend("");
+                          setSelectedPartnerIdsForSend([]);
                           setShowSendToPartnerModal(true);
                         }}
                         className="bg-[#273E8E] hover:bg-[#1e3270] text-white px-4 py-2 rounded-lg text-sm font-medium inline-flex items-center"
@@ -6986,7 +6991,7 @@ const BNPLBuyNow: React.FC = () => {
               <button
                 onClick={() => {
                   setShowSendToPartnerModal(false);
-                  setSelectedPartnerIdForSend("");
+                  setSelectedPartnerIdsForSend([]);
                 }}
                 className="text-gray-400 hover:text-gray-600"
               >
@@ -6996,59 +7001,105 @@ const BNPLBuyNow: React.FC = () => {
               </button>
             </div>
             <p className="text-sm text-gray-500 mb-4">
-              Sends this BNPL application (the one you have open) to the partner: full customer and property details,
+              Sends this BNPL application (the one you have open) to one or more financing partners: full customer and property details,
               loan plan snapshot, order lines, beneficiary, guarantor summary, and attachments when files exist on the
-              server (bank statement, live selfie, KYC uploads, signed guarantor form).
+              server (bank statement, live selfie, KYC uploads, signed guarantor form). Troosolar is not listed here.
             </p>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Select Partner</label>
-              <select
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-[#273E8E] focus:border-transparent outline-none"
-                value={selectedPartnerIdForSend}
-                onChange={(e) => setSelectedPartnerIdForSend(e.target.value ? Number(e.target.value) : "")}
-              >
-                <option value="">Select partner</option>
-                {financePartnersLoading ? (
-                  <option disabled>Loading partners...</option>
-                ) : (
-                  financePartnersList.map((partner: any) => (
-                    <option key={partner.id} value={partner.id}>
-                      {partner["Partner name"] ?? partner.name ?? `Partner #${partner.id}`}
-                      {partner.Status ? ` (${partner.Status})` : ""}
-                    </option>
-                  ))
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">Select Partners</label>
+                {sendableFinancePartners.length > 0 && (
+                  <label className="inline-flex items-center gap-2 text-sm text-[#273E8E] cursor-pointer font-medium">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={
+                        sendableFinancePartners.length > 0 &&
+                        selectedPartnerIdsForSend.length === sendableFinancePartners.length
+                      }
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedPartnerIdsForSend(
+                            sendableFinancePartners.map((p: any) => Number(p.id)).filter((id: number) => Number.isFinite(id))
+                          );
+                        } else {
+                          setSelectedPartnerIdsForSend([]);
+                        }
+                      }}
+                    />
+                    Select all
+                  </label>
                 )}
-              </select>
+              </div>
+              <div className="max-h-56 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                {financePartnersLoading ? (
+                  <p className="p-3 text-sm text-gray-500">Loading partners...</p>
+                ) : sendableFinancePartners.length === 0 ? (
+                  <p className="p-3 text-sm text-amber-700">No financing partners available (Troosolar is excluded).</p>
+                ) : (
+                  sendableFinancePartners.map((partner: any) => {
+                    const id = Number(partner.id);
+                    const checked = selectedPartnerIdsForSend.includes(id);
+                    const label = partner["Partner name"] ?? partner.name ?? `Partner #${partner.id}`;
+                    const status = partner.Status ? ` (${partner.Status})` : "";
+                    const email = partner.Email ? ` — ${partner.Email}` : "";
+                    return (
+                      <label
+                        key={partner.id}
+                        className={`flex items-start gap-3 p-3 cursor-pointer hover:bg-gray-50 ${checked ? "bg-blue-50" : ""}`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4"
+                          checked={checked}
+                          onChange={() => {
+                            setSelectedPartnerIdsForSend((prev) =>
+                              checked ? prev.filter((x) => x !== id) : [...prev, id]
+                            );
+                          }}
+                        />
+                        <span className="text-sm text-gray-800">
+                          <span className="font-medium">{label}</span>
+                          <span className="text-gray-500">{status}{email}</span>
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+              {selectedPartnerIdsForSend.length > 0 && (
+                <p className="text-xs text-gray-500 mt-2">{selectedPartnerIdsForSend.length} partner(s) selected</p>
+              )}
             </div>
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => {
                   setShowSendToPartnerModal(false);
-                  setSelectedPartnerIdForSend("");
+                  setSelectedPartnerIdsForSend([]);
                 }}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
               >
                 Cancel
               </button>
               <button
-                disabled={!selectedPartnerIdForSend || sendingToPartner}
+                disabled={selectedPartnerIdsForSend.length === 0 || sendingToPartner}
                 onClick={async () => {
                   const userId = selectedItem?.user_id ?? selectedItem?.user?.id;
-                  if (!userId || !selectedPartnerIdForSend) return;
+                  if (!userId || selectedPartnerIdsForSend.length === 0) return;
                   setSendingToPartner(true);
                   try {
-                    await sendToPartnerDetail(
+                    const res = await sendToPartnerDetail(
                       userId,
                       {
-                        partner_id: Number(selectedPartnerIdForSend),
+                        partner_ids: selectedPartnerIdsForSend,
                         loan_application_id:
                           selectedItem?.id != null ? Number(selectedItem.id) : undefined,
                       },
                       token
                     );
                     setShowSendToPartnerModal(false);
-                    setSelectedPartnerIdForSend("");
-                    alert("Email sent to partner successfully.");
+                    setSelectedPartnerIdsForSend([]);
+                    alert(res?.message || "Email sent to partner(s) successfully.");
                   } catch (err: any) {
                     alert(err?.response?.data?.message || err?.message || "Failed to send to partner.");
                   } finally {
@@ -7057,7 +7108,11 @@ const BNPLBuyNow: React.FC = () => {
                 }}
                 className="px-6 py-2 rounded-lg font-medium bg-[#273E8E] text-white hover:bg-[#1e3270] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {sendingToPartner ? "Sending..." : "Send Email"}
+                {sendingToPartner
+                  ? "Sending..."
+                  : selectedPartnerIdsForSend.length > 1
+                    ? `Send Email (${selectedPartnerIdsForSend.length})`
+                    : "Send Email"}
               </button>
             </div>
           </div>
