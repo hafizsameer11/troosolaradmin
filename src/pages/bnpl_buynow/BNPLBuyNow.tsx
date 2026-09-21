@@ -677,6 +677,10 @@ const BNPLBuyNow: React.FC = () => {
     credit_check_sme_manual_enabled: true,
     credit_check_sme_manual_title: "",
     credit_check_sme_manual_description: "",
+    credit_check_partner_fee_title: "",
+    credit_check_partner_fee_intro: "",
+    credit_check_partner_success_message: "",
+    credit_check_partner_routed_note: "",
     newDownPaymentOption: "",
     newDuration: "",
   });
@@ -958,6 +962,10 @@ const BNPLBuyNow: React.FC = () => {
         credit_check_sme_manual_enabled: bnplSettings.credit_check_method?.sme?.manual_enabled !== false,
         credit_check_sme_manual_title: String(bnplSettings.credit_check_method?.sme?.manual_title ?? bnplSettings.credit_check_sme_manual_title ?? ""),
         credit_check_sme_manual_description: String(bnplSettings.credit_check_method?.sme?.manual_description ?? bnplSettings.credit_check_sme_manual_description ?? ""),
+        credit_check_partner_fee_title: String(bnplSettings.credit_check_method?.partner?.fee_title ?? bnplSettings.credit_check_partner_fee_title ?? ""),
+        credit_check_partner_fee_intro: String(bnplSettings.credit_check_method?.partner?.fee_intro ?? bnplSettings.credit_check_partner_fee_intro ?? ""),
+        credit_check_partner_success_message: String(bnplSettings.credit_check_method?.partner?.success_message ?? bnplSettings.credit_check_partner_success_message ?? ""),
+        credit_check_partner_routed_note: String(bnplSettings.credit_check_method?.partner?.routed_note ?? bnplSettings.credit_check_partner_routed_note ?? ""),
       }));
     }
   }, [activeTab, bnplSettings]);
@@ -2334,6 +2342,10 @@ const BNPLBuyNow: React.FC = () => {
                       credit_check_sme_manual_enabled: !!loanSettingsForm.credit_check_sme_manual_enabled,
                       credit_check_sme_manual_title: loanSettingsForm.credit_check_sme_manual_title || undefined,
                       credit_check_sme_manual_description: loanSettingsForm.credit_check_sme_manual_description || undefined,
+                      credit_check_partner_fee_title: loanSettingsForm.credit_check_partner_fee_title || undefined,
+                      credit_check_partner_fee_intro: loanSettingsForm.credit_check_partner_fee_intro || undefined,
+                      credit_check_partner_success_message: loanSettingsForm.credit_check_partner_success_message || undefined,
+                      credit_check_partner_routed_note: loanSettingsForm.credit_check_partner_routed_note || undefined,
                     }, token);
                     queryClient.invalidateQueries({ queryKey: ["bnpl-settings"] });
                     alert("Loan settings saved successfully.");
@@ -2675,6 +2687,55 @@ const BNPLBuyNow: React.FC = () => {
                       </label>
                       <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Manual review" value={loanSettingsForm.credit_check_sme_manual_title} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_manual_title: e.target.value }))} />
                       <textarea rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Manual method description" value={loanSettingsForm.credit_check_sme_manual_description} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_manual_description: e.target.value }))} />
+                    </div>
+
+                    <div className="border rounded-lg p-4 space-y-3 bg-blue-50 border-blue-100">
+                      <div>
+                        <h4 className="font-semibold text-gray-900">Partner Financing credit check</h4>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Copy shown when the customer chooses Partner Financing — fee page and submitted success screen (e.g. turnaround: 2 - 5 working days).
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Fee page title</label>
+                        <input
+                          type="text"
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                          placeholder="Credit Check Fee"
+                          value={loanSettingsForm.credit_check_partner_fee_title}
+                          onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_partner_fee_title: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Fee page intro</label>
+                        <textarea
+                          rows={3}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                          placeholder="Pay the credit check fee to send your application to your selected financing partner. We'll get back to you within 2 - 5 working days."
+                          value={loanSettingsForm.credit_check_partner_fee_intro}
+                          onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_partner_fee_intro: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Submitted success message</label>
+                        <textarea
+                          rows={3}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                          placeholder="We have received your application for partner financing. We will get back to you within 2 - 5 working days."
+                          value={loanSettingsForm.credit_check_partner_success_message}
+                          onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_partner_success_message: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Routed note (blue info box)</label>
+                        <textarea
+                          rows={2}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                          placeholder="Your application was routed to a financing partner. Troosolar's internal guarantor flow does not continue for this path."
+                          value={loanSettingsForm.credit_check_partner_routed_note}
+                          onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_partner_routed_note: e.target.value }))}
+                        />
+                      </div>
                     </div>
                   </div>
                 )}

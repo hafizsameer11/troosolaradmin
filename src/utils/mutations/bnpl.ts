@@ -178,6 +178,10 @@ export const updateBNPLSettings = async (
     credit_check_sme_manual_enabled?: boolean;
     credit_check_sme_manual_title?: string;
     credit_check_sme_manual_description?: string;
+    credit_check_partner_fee_title?: string;
+    credit_check_partner_fee_intro?: string;
+    credit_check_partner_success_message?: string;
+    credit_check_partner_routed_note?: string;
   },
   token: string
 ): Promise<{ status: string; data?: any; message: string }> => {
