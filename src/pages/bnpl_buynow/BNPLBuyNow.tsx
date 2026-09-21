@@ -671,12 +671,28 @@ const BNPLBuyNow: React.FC = () => {
     credit_check_residential_manual_enabled: true,
     credit_check_residential_manual_title: "",
     credit_check_residential_manual_description: "",
+    credit_check_residential_manual_upload_intro: "",
+    credit_check_residential_manual_docs_title: "",
+    credit_check_residential_manual_bank_label: "",
+    credit_check_residential_manual_bank_hint: "",
+    credit_check_residential_manual_selfie_label: "",
+    credit_check_residential_manual_selfie_button: "",
+    credit_check_residential_manual_selfie_hint: "",
+    credit_check_residential_manual_submit_label: "",
     credit_check_sme_auto_enabled: true,
     credit_check_sme_auto_title: "",
     credit_check_sme_auto_description: "",
     credit_check_sme_manual_enabled: true,
     credit_check_sme_manual_title: "",
     credit_check_sme_manual_description: "",
+    credit_check_sme_manual_upload_intro: "",
+    credit_check_sme_manual_docs_title: "",
+    credit_check_sme_manual_bank_label: "",
+    credit_check_sme_manual_bank_hint: "",
+    credit_check_sme_manual_selfie_label: "",
+    credit_check_sme_manual_selfie_button: "",
+    credit_check_sme_manual_selfie_hint: "",
+    credit_check_sme_manual_submit_label: "",
     credit_check_partner_fee_title: "",
     credit_check_partner_fee_intro: "",
     credit_check_partner_success_message: "",
@@ -962,12 +978,28 @@ const BNPLBuyNow: React.FC = () => {
         credit_check_residential_manual_enabled: bnplSettings.credit_check_method?.residential?.manual_enabled !== false,
         credit_check_residential_manual_title: String(bnplSettings.credit_check_method?.residential?.manual_title ?? bnplSettings.credit_check_residential_manual_title ?? ""),
         credit_check_residential_manual_description: String(bnplSettings.credit_check_method?.residential?.manual_description ?? bnplSettings.credit_check_residential_manual_description ?? ""),
+        credit_check_residential_manual_upload_intro: String(bnplSettings.credit_check_method?.residential?.manual_upload_intro ?? bnplSettings.credit_check_residential_manual_upload_intro ?? ""),
+        credit_check_residential_manual_docs_title: String(bnplSettings.credit_check_method?.residential?.manual_docs_title ?? bnplSettings.credit_check_residential_manual_docs_title ?? ""),
+        credit_check_residential_manual_bank_label: String(bnplSettings.credit_check_method?.residential?.manual_bank_label ?? bnplSettings.credit_check_residential_manual_bank_label ?? ""),
+        credit_check_residential_manual_bank_hint: String(bnplSettings.credit_check_method?.residential?.manual_bank_hint ?? bnplSettings.credit_check_residential_manual_bank_hint ?? ""),
+        credit_check_residential_manual_selfie_label: String(bnplSettings.credit_check_method?.residential?.manual_selfie_label ?? bnplSettings.credit_check_residential_manual_selfie_label ?? ""),
+        credit_check_residential_manual_selfie_button: String(bnplSettings.credit_check_method?.residential?.manual_selfie_button ?? bnplSettings.credit_check_residential_manual_selfie_button ?? ""),
+        credit_check_residential_manual_selfie_hint: String(bnplSettings.credit_check_method?.residential?.manual_selfie_hint ?? bnplSettings.credit_check_residential_manual_selfie_hint ?? ""),
+        credit_check_residential_manual_submit_label: String(bnplSettings.credit_check_method?.residential?.manual_submit_label ?? bnplSettings.credit_check_residential_manual_submit_label ?? ""),
         credit_check_sme_auto_enabled: bnplSettings.credit_check_method?.sme?.auto_enabled !== false,
         credit_check_sme_auto_title: String(bnplSettings.credit_check_method?.sme?.auto_title ?? bnplSettings.credit_check_sme_auto_title ?? ""),
         credit_check_sme_auto_description: String(bnplSettings.credit_check_method?.sme?.auto_description ?? bnplSettings.credit_check_sme_auto_description ?? ""),
         credit_check_sme_manual_enabled: bnplSettings.credit_check_method?.sme?.manual_enabled !== false,
         credit_check_sme_manual_title: String(bnplSettings.credit_check_method?.sme?.manual_title ?? bnplSettings.credit_check_sme_manual_title ?? ""),
         credit_check_sme_manual_description: String(bnplSettings.credit_check_method?.sme?.manual_description ?? bnplSettings.credit_check_sme_manual_description ?? ""),
+        credit_check_sme_manual_upload_intro: String(bnplSettings.credit_check_method?.sme?.manual_upload_intro ?? bnplSettings.credit_check_sme_manual_upload_intro ?? ""),
+        credit_check_sme_manual_docs_title: String(bnplSettings.credit_check_method?.sme?.manual_docs_title ?? bnplSettings.credit_check_sme_manual_docs_title ?? ""),
+        credit_check_sme_manual_bank_label: String(bnplSettings.credit_check_method?.sme?.manual_bank_label ?? bnplSettings.credit_check_sme_manual_bank_label ?? ""),
+        credit_check_sme_manual_bank_hint: String(bnplSettings.credit_check_method?.sme?.manual_bank_hint ?? bnplSettings.credit_check_sme_manual_bank_hint ?? ""),
+        credit_check_sme_manual_selfie_label: String(bnplSettings.credit_check_method?.sme?.manual_selfie_label ?? bnplSettings.credit_check_sme_manual_selfie_label ?? ""),
+        credit_check_sme_manual_selfie_button: String(bnplSettings.credit_check_method?.sme?.manual_selfie_button ?? bnplSettings.credit_check_sme_manual_selfie_button ?? ""),
+        credit_check_sme_manual_selfie_hint: String(bnplSettings.credit_check_method?.sme?.manual_selfie_hint ?? bnplSettings.credit_check_sme_manual_selfie_hint ?? ""),
+        credit_check_sme_manual_submit_label: String(bnplSettings.credit_check_method?.sme?.manual_submit_label ?? bnplSettings.credit_check_sme_manual_submit_label ?? ""),
         credit_check_partner_fee_title: String(bnplSettings.credit_check_method?.partner?.fee_title ?? bnplSettings.credit_check_partner_fee_title ?? ""),
         credit_check_partner_fee_intro: String(bnplSettings.credit_check_method?.partner?.fee_intro ?? bnplSettings.credit_check_partner_fee_intro ?? ""),
         credit_check_partner_success_message: String(bnplSettings.credit_check_method?.partner?.success_message ?? bnplSettings.credit_check_partner_success_message ?? ""),
@@ -2341,12 +2373,28 @@ const BNPLBuyNow: React.FC = () => {
                       credit_check_residential_manual_enabled: !!loanSettingsForm.credit_check_residential_manual_enabled,
                       credit_check_residential_manual_title: loanSettingsForm.credit_check_residential_manual_title ?? "",
                       credit_check_residential_manual_description: loanSettingsForm.credit_check_residential_manual_description ?? "",
+                      credit_check_residential_manual_upload_intro: loanSettingsForm.credit_check_residential_manual_upload_intro ?? "",
+                      credit_check_residential_manual_docs_title: loanSettingsForm.credit_check_residential_manual_docs_title ?? "",
+                      credit_check_residential_manual_bank_label: loanSettingsForm.credit_check_residential_manual_bank_label ?? "",
+                      credit_check_residential_manual_bank_hint: loanSettingsForm.credit_check_residential_manual_bank_hint ?? "",
+                      credit_check_residential_manual_selfie_label: loanSettingsForm.credit_check_residential_manual_selfie_label ?? "",
+                      credit_check_residential_manual_selfie_button: loanSettingsForm.credit_check_residential_manual_selfie_button ?? "",
+                      credit_check_residential_manual_selfie_hint: loanSettingsForm.credit_check_residential_manual_selfie_hint ?? "",
+                      credit_check_residential_manual_submit_label: loanSettingsForm.credit_check_residential_manual_submit_label ?? "",
                       credit_check_sme_auto_enabled: !!loanSettingsForm.credit_check_sme_auto_enabled,
                       credit_check_sme_auto_title: loanSettingsForm.credit_check_sme_auto_title ?? "",
                       credit_check_sme_auto_description: loanSettingsForm.credit_check_sme_auto_description ?? "",
                       credit_check_sme_manual_enabled: !!loanSettingsForm.credit_check_sme_manual_enabled,
                       credit_check_sme_manual_title: loanSettingsForm.credit_check_sme_manual_title ?? "",
                       credit_check_sme_manual_description: loanSettingsForm.credit_check_sme_manual_description ?? "",
+                      credit_check_sme_manual_upload_intro: loanSettingsForm.credit_check_sme_manual_upload_intro ?? "",
+                      credit_check_sme_manual_docs_title: loanSettingsForm.credit_check_sme_manual_docs_title ?? "",
+                      credit_check_sme_manual_bank_label: loanSettingsForm.credit_check_sme_manual_bank_label ?? "",
+                      credit_check_sme_manual_bank_hint: loanSettingsForm.credit_check_sme_manual_bank_hint ?? "",
+                      credit_check_sme_manual_selfie_label: loanSettingsForm.credit_check_sme_manual_selfie_label ?? "",
+                      credit_check_sme_manual_selfie_button: loanSettingsForm.credit_check_sme_manual_selfie_button ?? "",
+                      credit_check_sme_manual_selfie_hint: loanSettingsForm.credit_check_sme_manual_selfie_hint ?? "",
+                      credit_check_sme_manual_submit_label: loanSettingsForm.credit_check_sme_manual_submit_label ?? "",
                       credit_check_partner_fee_title: loanSettingsForm.credit_check_partner_fee_title ?? "",
                       credit_check_partner_fee_intro: loanSettingsForm.credit_check_partner_fee_intro ?? "",
                       credit_check_partner_success_message: loanSettingsForm.credit_check_partner_success_message ?? "",
@@ -2677,6 +2725,17 @@ const BNPLBuyNow: React.FC = () => {
                       </label>
                       <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Manual review" value={loanSettingsForm.credit_check_residential_manual_title} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_residential_manual_title: e.target.value }))} />
                       <textarea rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Manual method description" value={loanSettingsForm.credit_check_residential_manual_description} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_residential_manual_description: e.target.value }))} />
+                      <div className="pt-3 border-t border-gray-200 space-y-2">
+                        <p className="text-xs font-semibold text-gray-700">Manual upload page (after fee)</p>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Upload your documents for manual credit review." value={loanSettingsForm.credit_check_residential_manual_upload_intro} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_residential_manual_upload_intro: e.target.value }))} />
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Required Documents" value={loanSettingsForm.credit_check_residential_manual_docs_title} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_residential_manual_docs_title: e.target.value }))} />
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Bank Statement (Last 6 Months)" value={loanSettingsForm.credit_check_residential_manual_bank_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_residential_manual_bank_label: e.target.value }))} />
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Accepted formats: PDF, JPG, PNG (Max 10MB)" value={loanSettingsForm.credit_check_residential_manual_bank_hint} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_residential_manual_bank_hint: e.target.value }))} />
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Live Photo / Selfie" value={loanSettingsForm.credit_check_residential_manual_selfie_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_residential_manual_selfie_label: e.target.value }))} />
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Tap to Open Camera & Take Selfie" value={loanSettingsForm.credit_check_residential_manual_selfie_button} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_residential_manual_selfie_button: e.target.value }))} />
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="A live selfie is required for identity verification." value={loanSettingsForm.credit_check_residential_manual_selfie_hint} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_residential_manual_selfie_hint: e.target.value }))} />
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Submit for Manual Review" value={loanSettingsForm.credit_check_residential_manual_submit_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_residential_manual_submit_label: e.target.value }))} />
+                      </div>
                     </div>
 
                     <div className="border rounded-lg p-4 space-y-3 bg-gray-50">
@@ -2693,6 +2752,17 @@ const BNPLBuyNow: React.FC = () => {
                       </label>
                       <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Manual review" value={loanSettingsForm.credit_check_sme_manual_title} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_manual_title: e.target.value }))} />
                       <textarea rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Manual method description" value={loanSettingsForm.credit_check_sme_manual_description} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_manual_description: e.target.value }))} />
+                      <div className="pt-3 border-t border-gray-200 space-y-2">
+                        <p className="text-xs font-semibold text-gray-700">Manual upload page (after fee)</p>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Upload your business documents for manual credit review." value={loanSettingsForm.credit_check_sme_manual_upload_intro} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_manual_upload_intro: e.target.value }))} />
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Required Documents" value={loanSettingsForm.credit_check_sme_manual_docs_title} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_manual_docs_title: e.target.value }))} />
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Business Bank Statement (Last 6 Months)" value={loanSettingsForm.credit_check_sme_manual_bank_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_manual_bank_label: e.target.value }))} />
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Accepted formats: PDF, JPG, PNG (Max 10MB)" value={loanSettingsForm.credit_check_sme_manual_bank_hint} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_manual_bank_hint: e.target.value }))} />
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Live Photo / Selfie" value={loanSettingsForm.credit_check_sme_manual_selfie_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_manual_selfie_label: e.target.value }))} />
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Tap to Open Camera & Take Selfie" value={loanSettingsForm.credit_check_sme_manual_selfie_button} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_manual_selfie_button: e.target.value }))} />
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="A live selfie is required for identity verification." value={loanSettingsForm.credit_check_sme_manual_selfie_hint} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_manual_selfie_hint: e.target.value }))} />
+                        <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Submit for Manual Review" value={loanSettingsForm.credit_check_sme_manual_submit_label} onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_sme_manual_submit_label: e.target.value }))} />
+                      </div>
                     </div>
 
                     <div className="border rounded-lg p-4 space-y-3 bg-blue-50 border-blue-100">
