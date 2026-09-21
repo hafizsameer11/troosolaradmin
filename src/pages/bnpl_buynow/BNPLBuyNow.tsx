@@ -906,9 +906,15 @@ const BNPLBuyNow: React.FC = () => {
     (guarantorFormsStatusData as any)?.data ??
     null;
 
+  const loanSettingsHydratedRef = useRef(false);
   useEffect(() => {
-    if (activeTab === "Loan Settings" && bnplSettings) {
-      setLoanSettingsForm((f) => ({
+    if (activeTab !== "Loan Settings") {
+      loanSettingsHydratedRef.current = false;
+      return;
+    }
+    if (!bnplSettings || loanSettingsHydratedRef.current) return;
+    loanSettingsHydratedRef.current = true;
+    setLoanSettingsForm((f) => ({
         ...f,
         interest_rate_percentage: String(bnplSettings.interest_rate_percentage ?? ""),
         min_down_percentage: String(bnplSettings.min_down_percentage ?? ""),
@@ -967,7 +973,6 @@ const BNPLBuyNow: React.FC = () => {
         credit_check_partner_success_message: String(bnplSettings.credit_check_method?.partner?.success_message ?? bnplSettings.credit_check_partner_success_message ?? ""),
         credit_check_partner_routed_note: String(bnplSettings.credit_check_method?.partner?.routed_note ?? bnplSettings.credit_check_partner_routed_note ?? ""),
       }));
-    }
   }, [activeTab, bnplSettings]);
 
   // Site banner (home promo) - for Banner tab
@@ -2327,27 +2332,28 @@ const BNPLBuyNow: React.FC = () => {
                       finance_agreement_accept_label: loanSettingsForm.finance_agreement_accept_label || undefined,
                       finance_agreement_residential_text: loanSettingsForm.finance_agreement_residential_text || undefined,
                       finance_agreement_sme_text: loanSettingsForm.finance_agreement_sme_text || undefined,
-                      credit_check_intro: loanSettingsForm.credit_check_intro || undefined,
-                      credit_check_continue_label: loanSettingsForm.credit_check_continue_label || undefined,
-                      credit_check_unavailable_label: loanSettingsForm.credit_check_unavailable_label || undefined,
+                      credit_check_intro: loanSettingsForm.credit_check_intro ?? "",
+                      credit_check_continue_label: loanSettingsForm.credit_check_continue_label ?? "",
+                      credit_check_unavailable_label: loanSettingsForm.credit_check_unavailable_label ?? "",
                       credit_check_residential_auto_enabled: !!loanSettingsForm.credit_check_residential_auto_enabled,
-                      credit_check_residential_auto_title: loanSettingsForm.credit_check_residential_auto_title || undefined,
-                      credit_check_residential_auto_description: loanSettingsForm.credit_check_residential_auto_description || undefined,
+                      credit_check_residential_auto_title: loanSettingsForm.credit_check_residential_auto_title ?? "",
+                      credit_check_residential_auto_description: loanSettingsForm.credit_check_residential_auto_description ?? "",
                       credit_check_residential_manual_enabled: !!loanSettingsForm.credit_check_residential_manual_enabled,
-                      credit_check_residential_manual_title: loanSettingsForm.credit_check_residential_manual_title || undefined,
-                      credit_check_residential_manual_description: loanSettingsForm.credit_check_residential_manual_description || undefined,
+                      credit_check_residential_manual_title: loanSettingsForm.credit_check_residential_manual_title ?? "",
+                      credit_check_residential_manual_description: loanSettingsForm.credit_check_residential_manual_description ?? "",
                       credit_check_sme_auto_enabled: !!loanSettingsForm.credit_check_sme_auto_enabled,
-                      credit_check_sme_auto_title: loanSettingsForm.credit_check_sme_auto_title || undefined,
-                      credit_check_sme_auto_description: loanSettingsForm.credit_check_sme_auto_description || undefined,
+                      credit_check_sme_auto_title: loanSettingsForm.credit_check_sme_auto_title ?? "",
+                      credit_check_sme_auto_description: loanSettingsForm.credit_check_sme_auto_description ?? "",
                       credit_check_sme_manual_enabled: !!loanSettingsForm.credit_check_sme_manual_enabled,
-                      credit_check_sme_manual_title: loanSettingsForm.credit_check_sme_manual_title || undefined,
-                      credit_check_sme_manual_description: loanSettingsForm.credit_check_sme_manual_description || undefined,
-                      credit_check_partner_fee_title: loanSettingsForm.credit_check_partner_fee_title || undefined,
-                      credit_check_partner_fee_intro: loanSettingsForm.credit_check_partner_fee_intro || undefined,
-                      credit_check_partner_success_message: loanSettingsForm.credit_check_partner_success_message || undefined,
-                      credit_check_partner_routed_note: loanSettingsForm.credit_check_partner_routed_note || undefined,
+                      credit_check_sme_manual_title: loanSettingsForm.credit_check_sme_manual_title ?? "",
+                      credit_check_sme_manual_description: loanSettingsForm.credit_check_sme_manual_description ?? "",
+                      credit_check_partner_fee_title: loanSettingsForm.credit_check_partner_fee_title ?? "",
+                      credit_check_partner_fee_intro: loanSettingsForm.credit_check_partner_fee_intro ?? "",
+                      credit_check_partner_success_message: loanSettingsForm.credit_check_partner_success_message ?? "",
+                      credit_check_partner_routed_note: loanSettingsForm.credit_check_partner_routed_note ?? "",
                     }, token);
                     queryClient.invalidateQueries({ queryKey: ["bnpl-settings"] });
+                    loanSettingsHydratedRef.current = false;
                     alert("Loan settings saved successfully.");
                   } catch (err: any) {
                     alert(err?.response?.data?.message || err?.message || "Failed to save settings.");
