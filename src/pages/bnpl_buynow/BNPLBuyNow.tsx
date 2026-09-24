@@ -4616,6 +4616,34 @@ const BNPLBuyNow: React.FC = () => {
                           <p className="text-xs text-gray-500 mb-1">Application ID</p>
                           <p className="text-sm font-semibold text-gray-900">#{selectedItem.id || "N/A"}</p>
                         </div>
+                        {(() => {
+                          const typeLabel = formatCustomerTypeLabel(selectedItem.customer_type);
+                          if (!typeLabel) return null;
+                          return (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Customer Type</p>
+                              <p className="text-sm font-semibold text-gray-900">{typeLabel}</p>
+                            </div>
+                          );
+                        })()}
+                        {(() => {
+                          const path = String(
+                            (selectedItem as any).financing_path
+                              || (selectedItem as any).loan_plan_snapshot?.financing?.path
+                              || ""
+                          ).toLowerCase();
+                          const isPartner =
+                            path === "partner"
+                            || String((selectedItem as any).credit_check_method || "").toLowerCase() === "partner";
+                          return (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Financing Path</p>
+                              <p className="text-sm font-semibold text-gray-900">
+                                {isPartner ? "Partner Financing" : "Troosolar Financing"}
+                              </p>
+                            </div>
+                          );
+                        })()}
                         {selectedItem.loan_amount && (
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Loan Amount</p>
@@ -4867,43 +4895,102 @@ const BNPLBuyNow: React.FC = () => {
                         const depositLabelPct =
                           depositPercentForLabel > 0 ? `${depositPercentForLabel}%` : "—";
 
+                        const snapFinancingPath = String(
+                          (selectedItem as any).financing_path
+                            || (snap as any)?.financing?.path
+                            || ""
+                        ).toLowerCase();
+                        const isPartnerFinancing =
+                          snapFinancingPath === "partner"
+                          || String((selectedItem as any).credit_check_method || "").toLowerCase() === "partner";
+
+                        const partnerTotalAmount = pickNum(
+                          ld.totalAmount,
+                          ld.grandTotal,
+                          ld.invoiceGrandTotal,
+                          loanCalc?.total_amount
+                        );
+                        const partnerInitialDeposit = pickNum(
+                          ld.baseDepositAmount,
+                          ld.depositAmount,
+                          ld.down_payment,
+                          loanCalc?.down_payment
+                        );
+                        const partnerLoanAmount = pickNum(
+                          ld.totalLoanAmount,
+                          ld.principal,
+                          loanCalc?.principal_amount
+                        ) || Math.max(partnerTotalAmount - partnerInitialDeposit, 0);
+                        const partnerDepositLabelPct =
+                          depositPercentRaw > 0
+                            ? `${depositPercentRaw}%`
+                            : depositPercentForLabel > 0
+                              ? `${depositPercentForLabel}%`
+                              : "—";
+
                         const summaryRows: {
                           num: number;
                           label: string;
                           value: number;
                           bold: boolean;
-                        }[] = [
-                          {
-                            num: 1,
-                            label: `Initial Deposit (${depositLabelPct}) + Total Administrative Fees`,
-                            value: initialDepositWithFees,
-                            bold: true,
-                          },
-                          {
-                            num: 2,
-                            label: "Total Loan Amount",
-                            value: totalLoanAmount,
-                            bold: false,
-                          },
-                          {
-                            num: 3,
-                            label: `Total Interest Amount (${interestRatePercent}% × ${tenor} mo)`,
-                            value: totalInterestAmount,
-                            bold: false,
-                          },
-                          {
-                            num: 4,
-                            label: "Total Repayment Amount",
-                            value: totalRepaymentAmount,
-                            bold: false,
-                          },
-                          {
-                            num: 5,
-                            label: "Monthly Repayment Amount",
-                            value: monthlyRepaymentAmount,
-                            bold: true,
-                          },
-                        ];
+                          accent?: "red" | null;
+                        }[] = isPartnerFinancing
+                          ? [
+                              {
+                                num: 1,
+                                label: "Total Amount",
+                                value: partnerTotalAmount,
+                                bold: false,
+                              },
+                              {
+                                num: 2,
+                                label:
+                                  partnerDepositLabelPct !== "—"
+                                    ? `Initial Deposit (${partnerDepositLabelPct})`
+                                    : "Initial Deposit",
+                                value: partnerInitialDeposit,
+                                bold: false,
+                                accent: "red",
+                              },
+                              {
+                                num: 3,
+                                label: "Total Loan Amount",
+                                value: partnerLoanAmount,
+                                bold: true,
+                              },
+                            ]
+                          : [
+                              {
+                                num: 1,
+                                label: `Initial Deposit (${depositLabelPct}) + Total Administrative Fees`,
+                                value: initialDepositWithFees,
+                                bold: true,
+                              },
+                              {
+                                num: 2,
+                                label: "Total Loan Amount",
+                                value: totalLoanAmount,
+                                bold: false,
+                              },
+                              {
+                                num: 3,
+                                label: `Total Interest Amount (${interestRatePercent}% × ${tenor} mo)`,
+                                value: totalInterestAmount,
+                                bold: false,
+                              },
+                              {
+                                num: 4,
+                                label: "Total Repayment Amount",
+                                value: totalRepaymentAmount,
+                                bold: false,
+                              },
+                              {
+                                num: 5,
+                                label: "Monthly Repayment Amount",
+                                value: monthlyRepaymentAmount,
+                                bold: true,
+                              },
+                            ];
 
                         return (
                           <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl shadow-sm border border-green-200 p-6">
@@ -4911,7 +4998,9 @@ const BNPLBuyNow: React.FC = () => {
                               <span className="text-[#273E8E] text-2xl font-bold" aria-hidden="true">
                                 ₦
                               </span>
-                              <h3 className="text-xl font-semibold text-gray-800">Loan Summary</h3>
+                              <h3 className="text-xl font-semibold text-gray-800">
+                                {isPartnerFinancing ? "Partner Financing Summary" : "Loan Summary"}
+                              </h3>
                             </div>
                             <div className="space-y-3">
                               {summaryRows.map((row) => (
@@ -4928,69 +5017,31 @@ const BNPLBuyNow: React.FC = () => {
                                   </p>
                                   <p
                                     className={`text-xl tabular-nums ${
-                                      row.num === 5
-                                        ? "font-bold text-[#273E8E]"
-                                        : row.bold
-                                          ? "font-bold text-gray-800"
-                                          : "font-medium text-gray-800"
+                                      row.accent === "red"
+                                        ? "font-medium text-red-600"
+                                        : !isPartnerFinancing && row.num === 5
+                                          ? "font-bold text-[#273E8E]"
+                                          : row.bold
+                                            ? "font-bold text-gray-800"
+                                            : "font-medium text-gray-800"
                                     }`}
                                   >
+                                    {row.accent === "red" ? "−" : ""}
                                     {formatCurrencyLoanSummary(row.value)}
                                   </p>
                                 </div>
                               ))}
                               <div className="border-t border-green-200 pt-3 mt-1">
                                 <div className="bg-white rounded-lg p-4 border border-green-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                                  <p className="text-sm font-medium text-gray-800">6. Loan Tenor</p>
+                                  <p className="text-sm font-medium text-gray-800">
+                                    {isPartnerFinancing ? "4. Loan Tenor" : "6. Loan Tenor"}
+                                  </p>
                                   <p className="text-xl font-bold text-[#273E8E]">
                                     {tenor} {tenor === 1 ? "month" : "months"}
                                   </p>
                                 </div>
                               </div>
                             </div>
-                            {/* {showAdminFees && (
-                              <div className="mt-4 bg-white rounded-lg p-4 border border-green-100">
-                                <h4 className="text-sm font-semibold text-gray-800 mb-2">
-                                  Administrative Fees
-                                </h4>
-                                <p className="text-xs text-gray-600 mb-3">
-                                  Insurance is calculated on the bundle price only. Management and legal fees
-                                  are calculated on the loan amount.
-                                </p>
-                                <div className="space-y-2 text-sm">
-                                  {snap.insuranceFee != null && (
-                                    <div className="flex justify-between">
-                                      <span className="text-gray-700">1. Insurance Fee</span>
-                                      <span className="font-medium">
-                                        {formatCurrencyLoanSummary(snap.insuranceFee as number)}
-                                      </span>
-                                    </div>
-                                  )}
-                                  {snap.managementFee != null && (
-                                    <div className="flex justify-between">
-                                      <span className="text-gray-700">2. Management Fee</span>
-                                      <span className="font-medium">
-                                        {formatCurrencyLoanSummary(snap.managementFee as number)}
-                                      </span>
-                                    </div>
-                                  )}
-                                  {snap.legalFee != null && (
-                                    <div className="flex justify-between">
-                                      <span className="text-gray-700">3. Legal Fee</span>
-                                      <span className="font-medium">
-                                        {formatCurrencyLoanSummary(snap.legalFee as number)}
-                                      </span>
-                                    </div>
-                                  )}
-                                  {snap.adminFeesTotal != null && (
-                                    <div className="flex justify-between font-semibold border-t border-green-100 pt-2 mt-2">
-                                      <span>Total Administrative Fees</span>
-                                      <span>{formatCurrencyLoanSummary(snap.adminFeesTotal as number)}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )} */}
                           </div>
                         );
                       })()}
