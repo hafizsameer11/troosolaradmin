@@ -695,6 +695,8 @@ const BNPLBuyNow: React.FC = () => {
     credit_check_sme_manual_submit_label: "",
     credit_check_partner_fee_title: "",
     credit_check_partner_fee_intro: "",
+    credit_check_partner_fee_note: "",
+    credit_check_partner_terms_label: "",
     credit_check_partner_success_message: "",
     credit_check_partner_routed_note: "",
     newDownPaymentOption: "",
@@ -1002,6 +1004,8 @@ const BNPLBuyNow: React.FC = () => {
         credit_check_sme_manual_submit_label: String(bnplSettings.credit_check_method?.sme?.manual_submit_label ?? bnplSettings.credit_check_sme_manual_submit_label ?? ""),
         credit_check_partner_fee_title: String(bnplSettings.credit_check_method?.partner?.fee_title ?? bnplSettings.credit_check_partner_fee_title ?? ""),
         credit_check_partner_fee_intro: String(bnplSettings.credit_check_method?.partner?.fee_intro ?? bnplSettings.credit_check_partner_fee_intro ?? ""),
+        credit_check_partner_fee_note: String(bnplSettings.credit_check_method?.partner?.fee_note ?? bnplSettings.credit_check_partner_fee_note ?? ""),
+        credit_check_partner_terms_label: String(bnplSettings.credit_check_method?.partner?.terms_label ?? bnplSettings.credit_check_partner_terms_label ?? ""),
         credit_check_partner_success_message: String(bnplSettings.credit_check_method?.partner?.success_message ?? bnplSettings.credit_check_partner_success_message ?? ""),
         credit_check_partner_routed_note: String(bnplSettings.credit_check_method?.partner?.routed_note ?? bnplSettings.credit_check_partner_routed_note ?? ""),
       }));
@@ -2397,6 +2401,8 @@ const BNPLBuyNow: React.FC = () => {
                       credit_check_sme_manual_submit_label: loanSettingsForm.credit_check_sme_manual_submit_label ?? "",
                       credit_check_partner_fee_title: loanSettingsForm.credit_check_partner_fee_title ?? "",
                       credit_check_partner_fee_intro: loanSettingsForm.credit_check_partner_fee_intro ?? "",
+                      credit_check_partner_fee_note: loanSettingsForm.credit_check_partner_fee_note ?? "",
+                      credit_check_partner_terms_label: loanSettingsForm.credit_check_partner_terms_label ?? "",
                       credit_check_partner_success_message: loanSettingsForm.credit_check_partner_success_message ?? "",
                       credit_check_partner_routed_note: loanSettingsForm.credit_check_partner_routed_note ?? "",
                     }, token);
@@ -2790,6 +2796,26 @@ const BNPLBuyNow: React.FC = () => {
                           placeholder="Pay the credit check fee to send your application to your selected financing partner. We'll get back to you within 2 - 5 working days."
                           value={loanSettingsForm.credit_check_partner_fee_intro}
                           onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_partner_fee_intro: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Fee info box note</label>
+                        <textarea
+                          rows={2}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                          placeholder="Pay the verification fee before we run your credit check. Prefer card or bank transfer? Use the payment option below."
+                          value={loanSettingsForm.credit_check_partner_fee_note}
+                          onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_partner_fee_note: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Terms &amp; conditions checkbox text</label>
+                        <textarea
+                          rows={2}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                          placeholder="I accept the terms and conditions for the credit check fee payment."
+                          value={loanSettingsForm.credit_check_partner_terms_label}
+                          onChange={(e) => setLoanSettingsForm((f) => ({ ...f, credit_check_partner_terms_label: e.target.value }))}
                         />
                       </div>
                       <div>

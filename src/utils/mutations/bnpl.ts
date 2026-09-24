@@ -196,6 +196,8 @@ export const updateBNPLSettings = async (
     credit_check_sme_manual_submit_label?: string;
     credit_check_partner_fee_title?: string;
     credit_check_partner_fee_intro?: string;
+    credit_check_partner_fee_note?: string;
+    credit_check_partner_terms_label?: string;
     credit_check_partner_success_message?: string;
     credit_check_partner_routed_note?: string;
   },
