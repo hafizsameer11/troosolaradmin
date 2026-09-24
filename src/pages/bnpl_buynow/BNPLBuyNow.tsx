@@ -509,6 +509,7 @@ const BNPLBuyNow: React.FC = () => {
   const [loadingInvoice, setLoadingInvoice] = useState(false);
   const [invoiceNotFound, setInvoiceNotFound] = useState(false);
   const [auditPaymentReceiptFile, setAuditPaymentReceiptFile] = useState<File | null>(null);
+  const [partnerOfferDocuments, setPartnerOfferDocuments] = useState<File[]>([]);
   const [statusForm, setStatusForm] = useState({
     status: "",
     admin_notes: "",
@@ -521,6 +522,12 @@ const BNPLBuyNow: React.FC = () => {
     customer_payment_time: "",
     counter_offer_min_deposit: "",
     counter_offer_min_tenor: "",
+    partner_offer_interest_rate: "",
+    partner_offer_initial_deposit: "",
+    partner_offer_admin_fees: "",
+    partner_offer_repayment_amount: "",
+    partner_offer_loan_amount: "",
+    partner_offer_tenor: "",
     property_state: "",
     property_address: "",
     contact_name: "",
@@ -539,6 +546,12 @@ const BNPLBuyNow: React.FC = () => {
     customer_payment_time: "",
     counter_offer_min_deposit: "",
     counter_offer_min_tenor: "",
+    partner_offer_interest_rate: "",
+    partner_offer_initial_deposit: "",
+    partner_offer_admin_fees: "",
+    partner_offer_repayment_amount: "",
+    partner_offer_loan_amount: "",
+    partner_offer_tenor: "",
     property_state: "",
     property_address: "",
     contact_name: "",
@@ -1088,6 +1101,7 @@ const BNPLBuyNow: React.FC = () => {
       setShowStatusModal(false);
       setSelectedItem(null);
       setStatusForm(emptyStatusForm());
+      setPartnerOfferDocuments([]);
       alert("Status updated successfully.");
     },
     onError: (error: any) => {
@@ -1561,6 +1575,41 @@ const BNPLBuyNow: React.FC = () => {
         if (dp > 0) depositPercentStr = String(Math.round(dp * 100) / 100);
       }
     }
+    const snapForPartner =
+      item?.loan_plan_snapshot && typeof item.loan_plan_snapshot === "object"
+        ? (item.loan_plan_snapshot as Record<string, unknown>)
+        : null;
+    const partnerInterest =
+      item?.partner_offer_interest_rate ??
+      snapForPartner?.interestRate ??
+      snapForPartner?.interest_rate ??
+      item?.mono?.interest_rate ??
+      "";
+    const partnerDeposit =
+      item?.partner_offer_initial_deposit ??
+      snapForPartner?.baseDepositAmount ??
+      snapForPartner?.depositAmount ??
+      item?.mono?.down_payment ??
+      "";
+    const partnerAdminFees =
+      item?.partner_offer_admin_fees ?? snapForPartner?.adminFeesTotal ?? "";
+    const partnerRepayment =
+      item?.partner_offer_repayment_amount ??
+      snapForPartner?.totalRepaymentAmount ??
+      snapForPartner?.totalRepayment ??
+      "";
+    const partnerLoanAmt =
+      item?.partner_offer_loan_amount ??
+      snapForPartner?.totalLoanAmount ??
+      snapForPartner?.principal ??
+      "";
+    const partnerTenor =
+      item?.partner_offer_tenor ??
+      snapForPartner?.tenor ??
+      item?.repayment_duration ??
+      item?.counter_offer_min_tenor ??
+      "";
+
     setStatusForm({
       status: item.status || item.order_status || "",
       admin_notes: item.admin_notes || "",
@@ -1576,6 +1625,12 @@ const BNPLBuyNow: React.FC = () => {
       customer_payment_time: item.customer_payment_time || "",
       counter_offer_min_deposit: depositPercentStr,
       counter_offer_min_tenor: item?.counter_offer_min_tenor ?? "",
+      partner_offer_interest_rate: partnerInterest !== "" && partnerInterest != null ? String(partnerInterest) : "",
+      partner_offer_initial_deposit: partnerDeposit !== "" && partnerDeposit != null ? String(partnerDeposit) : "",
+      partner_offer_admin_fees: partnerAdminFees !== "" && partnerAdminFees != null ? String(partnerAdminFees) : "",
+      partner_offer_repayment_amount: partnerRepayment !== "" && partnerRepayment != null ? String(partnerRepayment) : "",
+      partner_offer_loan_amount: partnerLoanAmt !== "" && partnerLoanAmt != null ? String(partnerLoanAmt) : "",
+      partner_offer_tenor: partnerTenor !== "" && partnerTenor != null ? String(partnerTenor) : "",
       property_state: item?.property_state || "",
       property_address: item?.property_address || "",
       contact_name: item?.contact_name || "",
@@ -1583,6 +1638,7 @@ const BNPLBuyNow: React.FC = () => {
     });
     setShowStatusModal(true);
     setAuditPaymentReceiptFile(null);
+    setPartnerOfferDocuments([]);
   };
 
   const handleStatusSubmit = () => {
@@ -1650,6 +1706,44 @@ const BNPLBuyNow: React.FC = () => {
       }
       payload.counter_offer_min_deposit = plan.upfrontDepositTotal;
       payload.counter_offer_min_tenor = tenor;
+    }
+
+    if (statusForm.status === "partner_offer") {
+      const interest = Number(statusForm.partner_offer_interest_rate);
+      const initialDeposit = Number(statusForm.partner_offer_initial_deposit);
+      const adminFees = Number(statusForm.partner_offer_admin_fees || 0);
+      const repaymentAmount = Number(statusForm.partner_offer_repayment_amount);
+      const loanAmount = Number(statusForm.partner_offer_loan_amount);
+      const tenor = Number(statusForm.partner_offer_tenor);
+      if (!Number.isFinite(interest) || interest < 0) {
+        alert("Please enter a valid interest rate for the partner offer.");
+        return;
+      }
+      if (!Number.isFinite(initialDeposit) || initialDeposit < 0) {
+        alert("Please enter a valid initial deposit amount.");
+        return;
+      }
+      if (!Number.isFinite(repaymentAmount) || repaymentAmount < 0) {
+        alert("Please enter a valid repayment amount.");
+        return;
+      }
+      if (!Number.isFinite(loanAmount) || loanAmount < 0) {
+        alert("Please enter a valid loan amount.");
+        return;
+      }
+      if (!Number.isFinite(tenor) || tenor < 1) {
+        alert("Please enter a valid tenor (months).");
+        return;
+      }
+      payload.partner_offer_interest_rate = interest;
+      payload.partner_offer_initial_deposit = initialDeposit;
+      payload.partner_offer_admin_fees = Number.isFinite(adminFees) ? adminFees : 0;
+      payload.partner_offer_repayment_amount = repaymentAmount;
+      payload.partner_offer_loan_amount = loanAmount;
+      payload.partner_offer_tenor = tenor;
+      if (partnerOfferDocuments.length > 0) {
+        payload.partner_offer_documents = partnerOfferDocuments;
+      }
     }
 
     if (activeTab === "BNPL Applications") {
@@ -1801,7 +1895,7 @@ const BNPLBuyNow: React.FC = () => {
     if (statusLower === "rejected" || statusLower === "cancelled") {
       return { backgroundColor: "#EF4444", color: "white" };
     }
-    if (statusLower === "counter_offer" || statusLower === "shipped") {
+    if (statusLower === "counter_offer" || statusLower === "partner_offer" || statusLower === "shipped") {
       return { backgroundColor: "#3B82F6", color: "white" };
     }
     return { backgroundColor: "#6B7280", color: "white" };
@@ -2234,6 +2328,7 @@ const BNPLBuyNow: React.FC = () => {
                     <option value="approved">Approved</option>
                     <option value="rejected">Rejected</option>
                     <option value="counter_offer">Counter Offer</option>
+                    <option value="partner_offer">Partner Offer</option>
                   </>
                 )}
                 {activeTab === "BNPL Guarantors" && (
@@ -6960,7 +7055,11 @@ const BNPLBuyNow: React.FC = () => {
       {/* Status Update Modal */}
       {showStatusModal && selectedItem && (
         <div className="fixed inset-0 bg-black/40 bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+          <div className={`bg-white rounded-lg p-6 w-full mx-4 max-h-[90vh] overflow-y-auto ${
+            statusForm.status === "partner_offer" || statusForm.status === "counter_offer"
+              ? "max-w-2xl"
+              : "max-w-md"
+          }`}>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-gray-900">Update Status</h2>
               <button
@@ -6969,6 +7068,7 @@ const BNPLBuyNow: React.FC = () => {
                   setSelectedItem(null);
                   setStatusForm(emptyStatusForm());
                   setAuditPaymentReceiptFile(null);
+                  setPartnerOfferDocuments([]);
                 }}
                 className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100 transition-colors"
               >
@@ -7007,6 +7107,7 @@ const BNPLBuyNow: React.FC = () => {
                       <option value="approved">Approved</option>
                       <option value="rejected">Rejected</option>
                       <option value="counter_offer">Counter Offer</option>
+                      <option value="partner_offer">Partner Offer</option>
                     </>
                   )}
                   {activeTab === "BNPL Guarantors" && (
@@ -7373,6 +7474,127 @@ const BNPLBuyNow: React.FC = () => {
                 </>
               )}
 
+              {statusForm.status === "partner_offer" && activeTab === "BNPL Applications" && (
+                <div className="rounded-xl border border-[#273E8E]/20 bg-[#F5F7FF] p-4 space-y-3">
+                  <p className="text-sm font-semibold text-[#273E8E]">Partner offer terms</p>
+                  <p className="text-xs text-gray-600">
+                    Enter the partner financing terms. All amount fields are editable in ₦. The customer will receive an email with these terms
+                    {partnerOfferDocuments.length > 0 ? " and any uploaded documents." : "."}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Interest rate (% monthly) *</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                        value={statusForm.partner_offer_interest_rate}
+                        onChange={(e) =>
+                          setStatusForm({ ...statusForm, partner_offer_interest_rate: e.target.value })
+                        }
+                        placeholder="e.g. 3.5"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Tenor (months) *</label>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                        value={statusForm.partner_offer_tenor}
+                        onChange={(e) =>
+                          setStatusForm({ ...statusForm, partner_offer_tenor: e.target.value })
+                        }
+                        placeholder="e.g. 12"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Initial deposit (₦) *</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                        value={statusForm.partner_offer_initial_deposit}
+                        onChange={(e) =>
+                          setStatusForm({ ...statusForm, partner_offer_initial_deposit: e.target.value })
+                        }
+                        placeholder="e.g. 284586.90"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Admin fees (₦)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                        value={statusForm.partner_offer_admin_fees}
+                        onChange={(e) =>
+                          setStatusForm({ ...statusForm, partner_offer_admin_fees: e.target.value })
+                        }
+                        placeholder="e.g. 0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Loan amount (₦) *</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                        value={statusForm.partner_offer_loan_amount}
+                        onChange={(e) =>
+                          setStatusForm({ ...statusForm, partner_offer_loan_amount: e.target.value })
+                        }
+                        placeholder="e.g. 1138347.60"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Repayment amount (₦) *</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                        value={statusForm.partner_offer_repayment_amount}
+                        onChange={(e) =>
+                          setStatusForm({ ...statusForm, partner_offer_repayment_amount: e.target.value })
+                        }
+                        placeholder="Total repayment"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Upload documents (optional)
+                    </label>
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/*"
+                      className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-[#273E8E] file:text-white"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        setPartnerOfferDocuments(files);
+                      }}
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      PDF, JPG, PNG, DOC (max 10MB each). Attached to the customer email.
+                    </p>
+                    {partnerOfferDocuments.length > 0 && (
+                      <ul className="mt-2 text-xs text-gray-700 space-y-1">
+                        {partnerOfferDocuments.map((f) => (
+                          <li key={`${f.name}-${f.size}`}>✓ {f.name}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {activeTab === "Audit Requests" ? "Additional notes (optional)" : "Admin Notes (Optional)"}
@@ -7395,6 +7617,7 @@ const BNPLBuyNow: React.FC = () => {
                   setShowStatusModal(false);
                   setSelectedItem(null);
                   setStatusForm(emptyStatusForm());
+                  setPartnerOfferDocuments([]);
                 }}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
               >

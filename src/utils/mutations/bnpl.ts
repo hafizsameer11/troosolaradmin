@@ -51,9 +51,54 @@ export const updateBNPLApplicationStatus = async (
     admin_notes?: string;
     counter_offer_min_deposit?: number;
     counter_offer_min_tenor?: number;
+    partner_offer_interest_rate?: number;
+    partner_offer_initial_deposit?: number;
+    partner_offer_admin_fees?: number;
+    partner_offer_repayment_amount?: number;
+    partner_offer_loan_amount?: number;
+    partner_offer_tenor?: number;
+    partner_offer_documents?: File[];
   },
   token: string
 ): Promise<{ status: string; data: unknown; message: string }> => {
+  const hasFiles = Array.isArray(payload.partner_offer_documents) && payload.partner_offer_documents.length > 0;
+  if (payload.status === "partner_offer" || hasFiles) {
+    const formData = new FormData();
+    formData.append("status", payload.status);
+    if (payload.admin_notes) formData.append("admin_notes", payload.admin_notes);
+    if (payload.partner_offer_interest_rate != null) {
+      formData.append("partner_offer_interest_rate", String(payload.partner_offer_interest_rate));
+    }
+    if (payload.partner_offer_initial_deposit != null) {
+      formData.append("partner_offer_initial_deposit", String(payload.partner_offer_initial_deposit));
+    }
+    if (payload.partner_offer_admin_fees != null) {
+      formData.append("partner_offer_admin_fees", String(payload.partner_offer_admin_fees));
+    }
+    if (payload.partner_offer_repayment_amount != null) {
+      formData.append("partner_offer_repayment_amount", String(payload.partner_offer_repayment_amount));
+    }
+    if (payload.partner_offer_loan_amount != null) {
+      formData.append("partner_offer_loan_amount", String(payload.partner_offer_loan_amount));
+    }
+    if (payload.partner_offer_tenor != null) {
+      formData.append("partner_offer_tenor", String(payload.partner_offer_tenor));
+    }
+    (payload.partner_offer_documents || []).forEach((file, index) => {
+      formData.append(`partner_offer_documents[${index}]`, file);
+    });
+    const res = await axios.post(
+      API_ENDPOINTS.ADMIN.BNPLApplicationUpdateStatus(id),
+      formData,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+    return res.data;
+  }
+
   return await apiCall(
     API_ENDPOINTS.ADMIN.BNPLApplicationUpdateStatus(id),
     "PUT",
