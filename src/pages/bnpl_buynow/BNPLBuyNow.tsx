@@ -445,6 +445,40 @@ function bnplApplicationOrderSummary(app: Record<string, unknown> | null | undef
   return null;
 }
 
+/** Partner overview/list should show financed principal (Total Loan Amount), not stored repayment. */
+function bnplIsPartnerApplication(app: Record<string, unknown> | null | undefined): boolean {
+  if (!app) return false;
+  const snap = app.loan_plan_snapshot as Record<string, unknown> | null | undefined;
+  const financing = snap?.financing as Record<string, unknown> | null | undefined;
+  const path = String(app.financing_path || financing?.path || "").toLowerCase();
+  return path === "partner" || String(app.credit_check_method || "").toLowerCase() === "partner";
+}
+
+function bnplDisplayLoanAmount(app: Record<string, unknown> | null | undefined): number | null {
+  if (!app) return null;
+  const toNum = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = typeof v === "number" ? v : parseFloat(String(v).replace(/,/g, ""));
+    return Number.isFinite(n) ? n : null;
+  };
+  if (bnplIsPartnerApplication(app)) {
+    const snap = (app.loan_plan_snapshot && typeof app.loan_plan_snapshot === "object"
+      ? (app.loan_plan_snapshot as Record<string, unknown>)
+      : null);
+    const mono = (app.mono && typeof app.mono === "object"
+      ? (app.mono as Record<string, unknown>)
+      : null);
+    const partnerPrincipal =
+      toNum(snap?.totalLoanAmount) ??
+      toNum(snap?.principal) ??
+      toNum(mono?.loan_amount) ??
+      toNum(mono?.principal_amount) ??
+      toNum(app.partner_offer_loan_amount);
+    if (partnerPrincipal != null && partnerPrincipal > 0) return partnerPrincipal;
+  }
+  return toNum(app.loan_amount);
+}
+
 const GENERIC_INVOICE_BUCKET_LABELS = new Set([
   "solar inverter",
   "solar panels",
@@ -3616,7 +3650,7 @@ const BNPLBuyNow: React.FC = () => {
                                 </span>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                                {formatCurrency(item.loan_amount)}
+                                {formatCurrency(bnplDisplayLoanAmount(item as Record<string, unknown>) ?? item.loan_amount)}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                 {item.repayment_duration} months
@@ -4752,14 +4786,21 @@ const BNPLBuyNow: React.FC = () => {
                             </div>
                           );
                         })()}
-                        {selectedItem.loan_amount && (
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Loan Amount</p>
-                            <p className="text-sm font-semibold text-[#273E8E]">
-                              {formatCurrency(selectedItem.loan_amount)}
-                            </p>
-                          </div>
-                        )}
+                        {(() => {
+                          const displayLoan = bnplDisplayLoanAmount(selectedItem as Record<string, unknown>);
+                          const isPartner = bnplIsPartnerApplication(selectedItem as Record<string, unknown>);
+                          if (displayLoan == null || displayLoan <= 0) return null;
+                          return (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">
+                                {isPartner ? "Total Loan Amount" : "Loan Amount"}
+                              </p>
+                              <p className="text-sm font-semibold text-[#273E8E]">
+                                {formatCurrency(displayLoan)}
+                              </p>
+                            </div>
+                          );
+                        })()}
                         {selectedItem.repayment_duration && (
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Repayment Duration</p>
