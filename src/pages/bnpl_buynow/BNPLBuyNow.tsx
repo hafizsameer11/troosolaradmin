@@ -351,6 +351,19 @@ function bnplComputeCounterOfferPlan(
   };
 }
 
+/** Same formula as Loan Summary: interest = loan × (rate%/100) × tenor; repayment = loan + interest. */
+function bnplComputePartnerOfferPlan(loanAmount: number, interestMonthlyPercent: number, tenorMonths: number) {
+  if (!(loanAmount > 0) || !(tenorMonths > 0) || !Number.isFinite(interestMonthlyPercent)) {
+    return null;
+  }
+  const totalInterestAmount =
+    Math.round(loanAmount * (interestMonthlyPercent / 100) * tenorMonths * 100) / 100;
+  const totalRepaymentAmount = Math.round((loanAmount + totalInterestAmount) * 100) / 100;
+  const monthlyRepaymentAmount =
+    Math.round((totalRepaymentAmount / tenorMonths) * 100) / 100;
+  return { totalInterestAmount, totalRepaymentAmount, monthlyRepaymentAmount };
+}
+
 function bnplPlanFromSnapshotForCounter(
   snap: Record<string, unknown> | null | undefined
 ): BnplCounterPlan | null {
@@ -1712,7 +1725,6 @@ const BNPLBuyNow: React.FC = () => {
       const interest = Number(statusForm.partner_offer_interest_rate);
       const initialDeposit = Number(statusForm.partner_offer_initial_deposit);
       const adminFees = Number(statusForm.partner_offer_admin_fees || 0);
-      const repaymentAmount = Number(statusForm.partner_offer_repayment_amount);
       const loanAmount = Number(statusForm.partner_offer_loan_amount);
       const tenor = Number(statusForm.partner_offer_tenor);
       if (!Number.isFinite(interest) || interest < 0) {
@@ -1723,10 +1735,6 @@ const BNPLBuyNow: React.FC = () => {
         alert("Please enter a valid initial deposit amount.");
         return;
       }
-      if (!Number.isFinite(repaymentAmount) || repaymentAmount < 0) {
-        alert("Please enter a valid repayment amount.");
-        return;
-      }
       if (!Number.isFinite(loanAmount) || loanAmount < 0) {
         alert("Please enter a valid loan amount.");
         return;
@@ -1735,10 +1743,15 @@ const BNPLBuyNow: React.FC = () => {
         alert("Please enter a valid tenor (months).");
         return;
       }
+      const plan = bnplComputePartnerOfferPlan(loanAmount, interest, tenor);
+      if (!plan) {
+        alert("Could not compute partner offer repayment. Check loan amount, interest rate, and tenor.");
+        return;
+      }
       payload.partner_offer_interest_rate = interest;
       payload.partner_offer_initial_deposit = initialDeposit;
       payload.partner_offer_admin_fees = Number.isFinite(adminFees) ? adminFees : 0;
-      payload.partner_offer_repayment_amount = repaymentAmount;
+      payload.partner_offer_repayment_amount = plan.totalRepaymentAmount;
       payload.partner_offer_loan_amount = loanAmount;
       payload.partner_offer_tenor = tenor;
       if (partnerOfferDocuments.length > 0) {
@@ -7478,95 +7491,166 @@ const BNPLBuyNow: React.FC = () => {
                 <div className="rounded-xl border border-[#273E8E]/20 bg-[#F5F7FF] p-4 space-y-3">
                   <p className="text-sm font-semibold text-[#273E8E]">Partner offer terms</p>
                   <p className="text-xs text-gray-600">
-                    Enter the partner financing terms. All amount fields are editable in ₦. The customer will receive an email with these terms
-                    {partnerOfferDocuments.length > 0 ? " and any uploaded documents." : "."}
+                    Enter deposit, fees, loan amount, interest rate, and tenor. Interest, total repayment, and monthly
+                    repayment follow Loan Summary: loan × (rate% ÷ 100) × months.
                   </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Interest rate (% monthly) *</label>
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
-                        value={statusForm.partner_offer_interest_rate}
-                        onChange={(e) =>
-                          setStatusForm({ ...statusForm, partner_offer_interest_rate: e.target.value })
-                        }
-                        placeholder="e.g. 3.5"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Tenor (months) *</label>
-                      <input
-                        type="number"
-                        min={1}
-                        step={1}
-                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
-                        value={statusForm.partner_offer_tenor}
-                        onChange={(e) =>
-                          setStatusForm({ ...statusForm, partner_offer_tenor: e.target.value })
-                        }
-                        placeholder="e.g. 12"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Initial deposit (₦) *</label>
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
-                        value={statusForm.partner_offer_initial_deposit}
-                        onChange={(e) =>
-                          setStatusForm({ ...statusForm, partner_offer_initial_deposit: e.target.value })
-                        }
-                        placeholder="e.g. 284586.90"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Admin fees (₦)</label>
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
-                        value={statusForm.partner_offer_admin_fees}
-                        onChange={(e) =>
-                          setStatusForm({ ...statusForm, partner_offer_admin_fees: e.target.value })
-                        }
-                        placeholder="e.g. 0"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Loan amount (₦) *</label>
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
-                        value={statusForm.partner_offer_loan_amount}
-                        onChange={(e) =>
-                          setStatusForm({ ...statusForm, partner_offer_loan_amount: e.target.value })
-                        }
-                        placeholder="e.g. 1138347.60"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Repayment amount (₦) *</label>
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
-                        value={statusForm.partner_offer_repayment_amount}
-                        onChange={(e) =>
-                          setStatusForm({ ...statusForm, partner_offer_repayment_amount: e.target.value })
-                        }
-                        placeholder="Total repayment"
-                      />
-                    </div>
-                  </div>
+                  {(() => {
+                    const loanAmt = Number(statusForm.partner_offer_loan_amount);
+                    const rate = Number(statusForm.partner_offer_interest_rate);
+                    const tenor = Number(statusForm.partner_offer_tenor);
+                    const plan = bnplComputePartnerOfferPlan(loanAmt, rate, tenor);
+                    const deposit = Number(statusForm.partner_offer_initial_deposit) || 0;
+                    const fees = Number(statusForm.partner_offer_admin_fees) || 0;
+                    const upfront = deposit + fees;
+                    const syncRepayment = (next: typeof statusForm) => {
+                      const p = bnplComputePartnerOfferPlan(
+                        Number(next.partner_offer_loan_amount),
+                        Number(next.partner_offer_interest_rate),
+                        Number(next.partner_offer_tenor)
+                      );
+                      return {
+                        ...next,
+                        partner_offer_repayment_amount: p
+                          ? String(p.totalRepaymentAmount)
+                          : next.partner_offer_repayment_amount,
+                      };
+                    };
+                    return (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Initial deposit (₦) *</label>
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                              value={statusForm.partner_offer_initial_deposit}
+                              onChange={(e) =>
+                                setStatusForm({ ...statusForm, partner_offer_initial_deposit: e.target.value })
+                              }
+                              placeholder="e.g. 284586.90"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Admin fees (₦)</label>
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                              value={statusForm.partner_offer_admin_fees}
+                              onChange={(e) =>
+                                setStatusForm({ ...statusForm, partner_offer_admin_fees: e.target.value })
+                              }
+                              placeholder="e.g. 0"
+                            />
+                          </div>
+                          <div className="sm:col-span-2 rounded-md bg-white border border-[#273E8E]/15 px-3 py-2 text-xs text-gray-700 flex justify-between gap-2">
+                            <span>Initial Deposit + Admin Fees (down payment)</span>
+                            <span className="font-semibold tabular-nums">
+                              ₦
+                              {upfront > 0
+                                ? upfront.toLocaleString("en-NG", {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })
+                                : "—"}
+                            </span>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Total loan amount (₦) *</label>
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                              value={statusForm.partner_offer_loan_amount}
+                              onChange={(e) =>
+                                setStatusForm(
+                                  syncRepayment({ ...statusForm, partner_offer_loan_amount: e.target.value })
+                                )
+                              }
+                              placeholder="e.g. 1138347.60"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Interest rate (% monthly) *</label>
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                              value={statusForm.partner_offer_interest_rate}
+                              onChange={(e) =>
+                                setStatusForm(
+                                  syncRepayment({ ...statusForm, partner_offer_interest_rate: e.target.value })
+                                )
+                              }
+                              placeholder="e.g. 4"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Loan tenor (months) *</label>
+                            <input
+                              type="number"
+                              min={1}
+                              step={1}
+                              className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white"
+                              value={statusForm.partner_offer_tenor}
+                              onChange={(e) =>
+                                setStatusForm(syncRepayment({ ...statusForm, partner_offer_tenor: e.target.value }))
+                              }
+                              placeholder="e.g. 12"
+                            />
+                          </div>
+                        </div>
+                        <div className="rounded-lg border border-[#273E8E]/20 bg-white p-3 space-y-2 text-sm">
+                          <div className="flex justify-between gap-2">
+                            <span className="text-gray-600">
+                              Total Interest Amount
+                              {Number.isFinite(rate) && Number.isFinite(tenor) && tenor > 0
+                                ? ` (${rate}% × ${tenor} mo)`
+                                : ""}
+                            </span>
+                            <span className="font-semibold tabular-nums">
+                              {plan
+                                ? `₦${plan.totalInterestAmount.toLocaleString("en-NG", {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}`
+                                : "—"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <span className="text-gray-600">Total Repayment Amount</span>
+                            <span className="font-semibold tabular-nums">
+                              {plan
+                                ? `₦${plan.totalRepaymentAmount.toLocaleString("en-NG", {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}`
+                                : "—"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <span className="text-gray-600">Monthly Repayment Amount</span>
+                            <span className="font-bold text-[#273E8E] tabular-nums">
+                              {plan
+                                ? `₦${plan.monthlyRepaymentAmount.toLocaleString("en-NG", {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}`
+                                : "—"}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-gray-500 pt-1 border-t border-gray-100">
+                            Repayment is auto-calculated and saved with the offer — not entered manually.
+                          </p>
+                        </div>
+                      </>
+                    );
+                  })()}
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       Upload documents (optional)
