@@ -5017,10 +5017,30 @@ const BNPLBuyNow: React.FC = () => {
                           interestRate != null && tenor > 0
                             ? `Total Interest Amount (${interestRate}% × ${tenor} mo)`
                             : "Total Interest Amount";
+                        const snap =
+                          selectedItem.loan_plan_snapshot &&
+                          typeof selectedItem.loan_plan_snapshot === "object"
+                            ? (selectedItem.loan_plan_snapshot as Record<string, unknown>)
+                            : null;
+                        let depositPct = bnplParseAmountCounter(snap?.depositPercent);
+                        if (!(depositPct > 0) && deposit > 0 && loanAmount > 0) {
+                          depositPct = (deposit / (deposit + loanAmount)) * 100;
+                        }
+                        const depositPctLabel =
+                          depositPct > 0
+                            ? `${
+                                Math.abs(depositPct - Math.round(depositPct)) < 0.05
+                                  ? Math.round(depositPct)
+                                  : Math.round(depositPct * 100) / 100
+                              }%`
+                            : null;
                         const summaryRows = [
                           {
-                            label:
-                              fees > 0
+                            label: depositPctLabel
+                              ? fees > 0
+                                ? `Initial Deposit (${depositPctLabel}) + Total Administrative Fees`
+                                : `Initial Deposit (${depositPctLabel})`
+                              : fees > 0
                                 ? "Initial Deposit + Total Administrative Fees"
                                 : "Initial Deposit",
                             value: upfrontDue,
