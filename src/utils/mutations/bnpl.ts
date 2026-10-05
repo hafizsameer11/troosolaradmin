@@ -61,50 +61,62 @@ export const updateBNPLApplicationStatus = async (
   },
   token: string
 ): Promise<{ status: string; data: unknown; message: string }> => {
-  const hasFiles = Array.isArray(payload.partner_offer_documents) && payload.partner_offer_documents.length > 0;
-  if (payload.status === "partner_offer" || hasFiles) {
-    const formData = new FormData();
-    formData.append("status", payload.status);
-    if (payload.admin_notes) formData.append("admin_notes", payload.admin_notes);
-    if (payload.partner_offer_interest_rate != null) {
-      formData.append("partner_offer_interest_rate", String(payload.partner_offer_interest_rate));
-    }
-    if (payload.partner_offer_initial_deposit != null) {
-      formData.append("partner_offer_initial_deposit", String(payload.partner_offer_initial_deposit));
-    }
-    if (payload.partner_offer_admin_fees != null) {
-      formData.append("partner_offer_admin_fees", String(payload.partner_offer_admin_fees));
-    }
-    if (payload.partner_offer_repayment_amount != null) {
-      formData.append("partner_offer_repayment_amount", String(payload.partner_offer_repayment_amount));
-    }
-    if (payload.partner_offer_loan_amount != null) {
-      formData.append("partner_offer_loan_amount", String(payload.partner_offer_loan_amount));
-    }
-    if (payload.partner_offer_tenor != null) {
-      formData.append("partner_offer_tenor", String(payload.partner_offer_tenor));
-    }
-    (payload.partner_offer_documents || []).forEach((file, index) => {
-      formData.append(`partner_offer_documents[${index}]`, file);
-    });
-    const res = await axios.post(
+  const files = Array.isArray(payload.partner_offer_documents)
+    ? payload.partner_offer_documents.filter(Boolean)
+    : [];
+  const hasFiles = files.length > 0;
+
+  // JSON PUT for normal updates (including partner_offer terms).
+  // Use multipart only when documents are attached — FormData without files was failing to persist.
+  if (!hasFiles) {
+    const { partner_offer_documents: _docs, ...jsonPayload } = payload;
+    return await apiCall(
       API_ENDPOINTS.ADMIN.BNPLApplicationUpdateStatus(id),
-      formData,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
+      "PUT",
+      jsonPayload,
+      token
     );
-    return res.data;
   }
 
-  return await apiCall(
+  const formData = new FormData();
+  formData.append("status", payload.status);
+  if (payload.admin_notes != null && payload.admin_notes !== "") {
+    formData.append("admin_notes", payload.admin_notes);
+  }
+  if (payload.partner_offer_interest_rate != null) {
+    formData.append("partner_offer_interest_rate", String(payload.partner_offer_interest_rate));
+  }
+  if (payload.partner_offer_initial_deposit != null) {
+    formData.append("partner_offer_initial_deposit", String(payload.partner_offer_initial_deposit));
+  }
+  if (payload.partner_offer_admin_fees != null) {
+    formData.append("partner_offer_admin_fees", String(payload.partner_offer_admin_fees));
+  }
+  if (payload.partner_offer_repayment_amount != null) {
+    formData.append("partner_offer_repayment_amount", String(payload.partner_offer_repayment_amount));
+  }
+  if (payload.partner_offer_loan_amount != null) {
+    formData.append("partner_offer_loan_amount", String(payload.partner_offer_loan_amount));
+  }
+  if (payload.partner_offer_tenor != null) {
+    formData.append("partner_offer_tenor", String(payload.partner_offer_tenor));
+  }
+  files.forEach((file, index) => {
+    formData.append(`partner_offer_documents[${index}]`, file);
+  });
+
+  const res = await axios.post(
     API_ENDPOINTS.ADMIN.BNPLApplicationUpdateStatus(id),
-    "PUT",
-    payload,
-    token
+    formData,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        // Let the browser set multipart boundary — do not force Content-Type.
+      },
+    }
   );
+  return res.data;
 };
 
 // PUT /api/admin/bnpl/guarantors/{id}/status

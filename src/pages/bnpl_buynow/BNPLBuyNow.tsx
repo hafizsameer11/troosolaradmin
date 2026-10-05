@@ -1195,9 +1195,19 @@ const BNPLBuyNow: React.FC = () => {
       alert("Status updated successfully.");
     },
     onError: (error: any) => {
-      const msg = error?.message || error?.response?.data?.message || "Failed to update status.";
+      const msg =
+        error?.message ||
+        error?.response?.data?.message ||
+        error?.data?.message ||
+        "Failed to update status.";
       const errors = error?.response?.data?.errors || error?.data?.errors;
-      const detail = errors && typeof errors === "object" ? Object.values(errors).flat().join(" ") : "";
+      const detail =
+        errors && typeof errors === "object"
+          ? Object.values(errors)
+              .flat()
+              .map((v) => String(v))
+              .join(" ")
+          : "";
       alert(detail ? `${msg}\n${detail}` : msg);
     },
   });
@@ -1637,7 +1647,7 @@ const BNPLBuyNow: React.FC = () => {
     }
   };
 
-  const handleUpdateStatus = (item: any) => {
+  const populateStatusFormFromItem = (item: any) => {
     setSelectedItem(item);
     const snap =
       item?.loan_plan_snapshot && typeof item.loan_plan_snapshot === "object"
@@ -1753,9 +1763,26 @@ const BNPLBuyNow: React.FC = () => {
       contact_name: item?.contact_name || "",
       contact_phone: item?.contact_phone || item?.user?.phone || "",
     });
-    setShowStatusModal(true);
     setAuditPaymentReceiptFile(null);
     setPartnerOfferDocuments([]);
+  };
+
+  const handleUpdateStatus = async (item: any) => {
+    // Prefill from list row immediately so the modal opens fast.
+    populateStatusFormFromItem(item);
+    setShowStatusModal(true);
+
+    // Reload full application so loan_plan_snapshot / partner_offer fields are present for save.
+    if (activeTab === "BNPL Applications" && item?.id != null && token) {
+      try {
+        const detailData = await getBNPLApplication(item.id, token);
+        if (detailData?.data) {
+          populateStatusFormFromItem(detailData.data);
+        }
+      } catch (err) {
+        console.error("Failed to refresh application before status update:", err);
+      }
+    }
   };
 
   const handleStatusSubmit = () => {
@@ -8038,6 +8065,7 @@ const BNPLBuyNow: React.FC = () => {
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleStatusSubmit}
                 disabled={
                   !statusForm.status ||
