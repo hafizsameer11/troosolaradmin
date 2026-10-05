@@ -4974,8 +4974,131 @@ const BNPLBuyNow: React.FC = () => {
                       </div>
                     )}
 
+                    {/* Same Partner Financing Offer breakdown the customer sees */}
+                    {String(selectedItem.status || "").toLowerCase() === "partner_offer" &&
+                      (() => {
+                        const deposit = bnplParseAmountCounter(selectedItem.partner_offer_initial_deposit);
+                        const fees = bnplParseAmountCounter(selectedItem.partner_offer_admin_fees);
+                        const upfrontDue = deposit + fees;
+                        const loanAmount = bnplParseAmountCounter(selectedItem.partner_offer_loan_amount);
+                        const tenor = Number(selectedItem.partner_offer_tenor) || 0;
+                        const interestRate =
+                          selectedItem.partner_offer_interest_rate != null
+                            ? Number(selectedItem.partner_offer_interest_rate)
+                            : null;
+                        const storedRepayment = bnplParseAmountCounter(
+                          selectedItem.partner_offer_repayment_amount
+                        );
+                        const computedInterest =
+                          loanAmount > 0 &&
+                          interestRate != null &&
+                          Number.isFinite(interestRate) &&
+                          tenor > 0
+                            ? Math.round(loanAmount * (interestRate / 100) * tenor * 100) / 100
+                            : 0;
+                        const totalInterest =
+                          computedInterest > 0
+                            ? computedInterest
+                            : storedRepayment > 0 && loanAmount > 0
+                              ? Math.max(storedRepayment - loanAmount, 0)
+                              : 0;
+                        const repaymentAmount =
+                          computedInterest > 0
+                            ? Math.round((loanAmount + computedInterest) * 100) / 100
+                            : storedRepayment;
+                        const monthlyRepayment =
+                          tenor > 0 && repaymentAmount > 0
+                            ? Math.round((repaymentAmount / tenor) * 100) / 100
+                            : 0;
+                        if (!(loanAmount > 0) && !(upfrontDue > 0) && !(repaymentAmount > 0)) {
+                          return null;
+                        }
+                        const interestLabel =
+                          interestRate != null && tenor > 0
+                            ? `Total Interest Amount (${interestRate}% × ${tenor} mo)`
+                            : "Total Interest Amount";
+                        const summaryRows = [
+                          {
+                            label:
+                              fees > 0
+                                ? "Initial Deposit + Total Administrative Fees"
+                                : "Initial Deposit",
+                            value: upfrontDue,
+                          },
+                          { label: "Total Loan Amount", value: loanAmount },
+                          { label: interestLabel, value: totalInterest },
+                          { label: "Total Repayment Amount", value: repaymentAmount },
+                          { label: "Monthly Repayment Amount", value: monthlyRepayment },
+                        ];
+                        const docs = Array.isArray(selectedItem.partner_offer_documents)
+                          ? selectedItem.partner_offer_documents
+                          : [];
+                        return (
+                          <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl shadow-sm border border-green-200 p-6">
+                            <div className="flex items-center gap-3 mb-2">
+                              <span className="text-[#273E8E] text-2xl font-bold" aria-hidden="true">
+                                ₦
+                              </span>
+                              <h3 className="text-xl font-semibold text-gray-800">
+                                Partner Financing Offer
+                              </h3>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-1">
+                              Same breakdown shown to the customer on their loan details page.
+                            </p>
+                            <p className="text-sm text-gray-600 mb-4">
+                              A financing partner has provided an offer for this application. Review the terms below
+                              {docs.length > 0 ? " (documents were emailed to the customer)." : "."}
+                            </p>
+                            {selectedItem.admin_notes && (
+                              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                <p className="text-sm text-gray-700">
+                                  <strong>Admin Note:</strong> {selectedItem.admin_notes}
+                                </p>
+                              </div>
+                            )}
+                            <div className="space-y-3">
+                              {summaryRows.map((row, index) => (
+                                <div
+                                  key={row.label}
+                                  className="bg-white rounded-lg p-4 border border-green-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1"
+                                >
+                                  <p className="text-sm font-medium text-gray-800">{row.label}</p>
+                                  <p
+                                    className={`text-xl font-bold tabular-nums ${
+                                      index === 4 ? "text-[#273E8E]" : "text-gray-800"
+                                    }`}
+                                  >
+                                    {bnplFormatNaira(row.value)}
+                                  </p>
+                                </div>
+                              ))}
+                              <div className="border-t border-green-200 pt-3 mt-1">
+                                <div className="bg-white rounded-lg p-4 border border-green-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                                  <p className="text-sm font-medium text-gray-800">Loan Tenor</p>
+                                  <p className="text-xl font-bold text-[#273E8E]">
+                                    {tenor > 0
+                                      ? `${tenor} ${tenor === 1 ? "month" : "months"}`
+                                      : "—"}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                            {upfrontDue > 0 && (
+                              <div className="mt-4 bg-white rounded-lg p-4 border-2 border-[#273E8E]">
+                                <p className="text-sm text-gray-600">
+                                  Customer down payment due:{" "}
+                                  <strong className="text-[#273E8E]">{bnplFormatNaira(upfrontDue)}</strong>
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
                     {selectedItem.loan_plan_snapshot &&
                       typeof selectedItem.loan_plan_snapshot === "object" &&
+                      String(selectedItem.status || "").toLowerCase() !== "partner_offer" &&
                       (() => {
                         const snap = selectedItem.loan_plan_snapshot as Record<string, unknown>;
                         const ld = snap;
