@@ -58,6 +58,7 @@ export const updateBNPLApplicationStatus = async (
     partner_offer_repayment_amount?: number;
     partner_offer_loan_amount?: number;
     partner_offer_tenor?: number;
+    partner_offer_writeup?: string;
     partner_offer_documents?: File[];
   },
   token: string
@@ -104,6 +105,9 @@ export const updateBNPLApplicationStatus = async (
   }
   if (payload.partner_offer_tenor != null) {
     formData.append("partner_offer_tenor", String(payload.partner_offer_tenor));
+  }
+  if (payload.partner_offer_writeup != null) {
+    formData.append("partner_offer_writeup", payload.partner_offer_writeup);
   }
   files.forEach((file, index) => {
     formData.append(`partner_offer_documents[${index}]`, file);

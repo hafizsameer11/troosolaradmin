@@ -59,6 +59,10 @@ import { getAllUsers } from "../../utils/queries/users";
 // Base URL for document links (backend stores paths like "loan_applications/xxx.pdf")
 const DOCUMENT_BASE_URL = API_DOMAIN.replace(/\/api\/?$/, "") || "https://app.troosolar.io";
 
+/** Default customer-facing text under “Partner Financing Offer” (editable per application). */
+const DEFAULT_PARTNER_OFFER_WRITEUP =
+  "A financing partner has provided an offer for your application. Review the terms below.";
+
 function siteBannerSlotPreview(slot?: { url?: string | null; path?: string | null } | null): string | null {
   if (!slot) return null;
   const url = slot.url;
@@ -617,6 +621,7 @@ const BNPLBuyNow: React.FC = () => {
     partner_offer_repayment_amount: "",
     partner_offer_loan_amount: "",
     partner_offer_tenor: "",
+    partner_offer_writeup: DEFAULT_PARTNER_OFFER_WRITEUP,
     property_state: "",
     property_address: "",
     contact_name: "",
@@ -642,6 +647,7 @@ const BNPLBuyNow: React.FC = () => {
     partner_offer_repayment_amount: "",
     partner_offer_loan_amount: "",
     partner_offer_tenor: "",
+    partner_offer_writeup: DEFAULT_PARTNER_OFFER_WRITEUP,
     property_state: "",
     property_address: "",
     contact_name: "",
@@ -1771,6 +1777,9 @@ const BNPLBuyNow: React.FC = () => {
           : "",
       partner_offer_loan_amount: computedLoan > 0 ? String(computedLoan) : "",
       partner_offer_tenor: partnerTenor !== "" && partnerTenor != null ? String(partnerTenor) : "",
+      partner_offer_writeup:
+        (typeof item?.partner_offer_writeup === "string" && item.partner_offer_writeup.trim()) ||
+        DEFAULT_PARTNER_OFFER_WRITEUP,
       property_state: item?.property_state || "",
       property_address: item?.property_address || "",
       contact_name: item?.contact_name || "",
@@ -1916,6 +1925,8 @@ const BNPLBuyNow: React.FC = () => {
       payload.partner_offer_repayment_amount = plan.totalRepaymentAmount;
       payload.partner_offer_loan_amount = loanAmount;
       payload.partner_offer_tenor = tenor;
+      payload.partner_offer_writeup =
+        (statusForm.partner_offer_writeup || "").trim() || DEFAULT_PARTNER_OFFER_WRITEUP;
       if (partnerOfferDocuments.length > 0) {
         payload.partner_offer_documents = partnerOfferDocuments;
       }
@@ -5106,8 +5117,12 @@ const BNPLBuyNow: React.FC = () => {
                               Same breakdown shown to the customer on their loan details page.
                             </p>
                             <p className="text-sm text-gray-600 mb-4">
-                              A financing partner has provided an offer for this application. Review the terms below
-                              {docs.length > 0 ? " (documents were emailed to the customer)." : "."}
+                              {(typeof selectedItem.partner_offer_writeup === "string" &&
+                                selectedItem.partner_offer_writeup.trim()) ||
+                                DEFAULT_PARTNER_OFFER_WRITEUP}
+                              {docs.length > 0
+                                ? " Supporting documents were emailed to the customer."
+                                : ""}
                             </p>
                             {selectedItem.admin_notes && (
                               <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -8020,6 +8035,36 @@ const BNPLBuyNow: React.FC = () => {
                       </>
                     );
                   })()}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Customer writeup (shown under Partner Financing Offer)
+                    </label>
+                    <textarea
+                      className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-[#273E8E]/30 focus:border-[#273E8E] outline-none"
+                      rows={3}
+                      value={statusForm.partner_offer_writeup}
+                      onChange={(e) =>
+                        setStatusForm({ ...statusForm, partner_offer_writeup: e.target.value })
+                      }
+                      placeholder={DEFAULT_PARTNER_OFFER_WRITEUP}
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      This text appears on the customer loan page and in the partner offer email. Leave blank to use
+                      the default.
+                    </p>
+                    <button
+                      type="button"
+                      className="mt-1 text-xs font-medium text-[#273E8E] hover:underline"
+                      onClick={() =>
+                        setStatusForm({
+                          ...statusForm,
+                          partner_offer_writeup: DEFAULT_PARTNER_OFFER_WRITEUP,
+                        })
+                      }
+                    >
+                      Reset to default writeup
+                    </button>
+                  </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       Upload documents (optional)
