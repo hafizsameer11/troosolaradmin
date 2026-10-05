@@ -1696,9 +1696,22 @@ const BNPLBuyNow: React.FC = () => {
         item?.mono?.down_payment ??
         0
     );
-    let partnerDepositPct = bnplParseAmountCounter(snapForPartner?.depositPercent);
+    // Prefer saved partner-offer %, then derive from partner amounts — not customer snapshot %.
+    let partnerDepositPct = bnplParseAmountCounter(item?.partner_offer_deposit_percent);
     if (!(partnerDepositPct > 0) && partnerTotalAmt > 0 && partnerDepositNaira > 0) {
       partnerDepositPct = Math.round((partnerDepositNaira / partnerTotalAmt) * 10000) / 100;
+    }
+    if (!(partnerDepositPct > 0)) {
+      const partnerLoanForPct = bnplParseAmountCounter(
+        item?.partner_offer_loan_amount ??
+          snapForPartner?.totalLoanAmount ??
+          snapForPartner?.principal ??
+          0
+      );
+      if (partnerDepositNaira > 0 && partnerLoanForPct > 0) {
+        partnerDepositPct =
+          Math.round((partnerDepositNaira / (partnerDepositNaira + partnerLoanForPct)) * 10000) / 100;
+      }
     }
     const computedDeposit =
       partnerDepositPct > 0 && partnerTotalAmt > 0
@@ -1897,6 +1910,7 @@ const BNPLBuyNow: React.FC = () => {
         return;
       }
       payload.partner_offer_interest_rate = interest;
+      payload.partner_offer_deposit_percent = depositPercent;
       payload.partner_offer_initial_deposit = initialDeposit;
       payload.partner_offer_admin_fees = Number.isFinite(adminFees) ? adminFees : 0;
       payload.partner_offer_repayment_amount = plan.totalRepaymentAmount;
@@ -5044,12 +5058,10 @@ const BNPLBuyNow: React.FC = () => {
                           interestRate != null && tenor > 0
                             ? `Total Interest Amount (${interestRate}% × ${tenor} mo)`
                             : "Total Interest Amount";
-                        const snap =
-                          selectedItem.loan_plan_snapshot &&
-                          typeof selectedItem.loan_plan_snapshot === "object"
-                            ? (selectedItem.loan_plan_snapshot as Record<string, unknown>)
-                            : null;
-                        let depositPct = bnplParseAmountCounter(snap?.depositPercent);
+                        // Use partner-offer % (admin-set), not the customer's original snapshot %.
+                        let depositPct = bnplParseAmountCounter(
+                          selectedItem.partner_offer_deposit_percent
+                        );
                         if (!(depositPct > 0) && deposit > 0 && loanAmount > 0) {
                           depositPct = (deposit / (deposit + loanAmount)) * 100;
                         }

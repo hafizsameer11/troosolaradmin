@@ -52,6 +52,7 @@ export const updateBNPLApplicationStatus = async (
     counter_offer_min_deposit?: number;
     counter_offer_min_tenor?: number;
     partner_offer_interest_rate?: number;
+    partner_offer_deposit_percent?: number;
     partner_offer_initial_deposit?: number;
     partner_offer_admin_fees?: number;
     partner_offer_repayment_amount?: number;
@@ -85,6 +86,9 @@ export const updateBNPLApplicationStatus = async (
   }
   if (payload.partner_offer_interest_rate != null) {
     formData.append("partner_offer_interest_rate", String(payload.partner_offer_interest_rate));
+  }
+  if (payload.partner_offer_deposit_percent != null) {
+    formData.append("partner_offer_deposit_percent", String(payload.partner_offer_deposit_percent));
   }
   if (payload.partner_offer_initial_deposit != null) {
     formData.append("partner_offer_initial_deposit", String(payload.partner_offer_initial_deposit));
