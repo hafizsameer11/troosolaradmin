@@ -499,6 +499,45 @@ function bnplIsPartnerApplication(app: Record<string, unknown> | null | undefine
   return path === "partner" || String(app.credit_check_method || "").toLowerCase() === "partner";
 }
 
+/** True when admin has saved partner-offer terms (still true after status becomes approved). */
+function bnplHadPartnerOffer(app: Record<string, unknown> | null | undefined): boolean {
+  if (!app) return false;
+  if (String(app.status || "").toLowerCase() === "partner_offer") return true;
+  const toNum = (v: unknown): number => {
+    if (v === null || v === undefined || v === "") return 0;
+    const n = typeof v === "number" ? v : parseFloat(String(v).replace(/,/g, ""));
+    return Number.isFinite(n) ? n : 0;
+  };
+  return (
+    toNum(app.partner_offer_loan_amount) > 0 ||
+    toNum(app.partner_offer_initial_deposit) > 0 ||
+    toNum(app.partner_offer_repayment_amount) > 0
+  );
+}
+
+/** List/detail badge: Partner offer vs Troosolar (and Partner path before an offer is sent). */
+function bnplFinancingTypeLabel(app: Record<string, unknown> | null | undefined): {
+  label: string;
+  className: string;
+} {
+  if (bnplHadPartnerOffer(app)) {
+    return {
+      label: "Partner offer",
+      className: "bg-indigo-50 text-indigo-800 border border-indigo-200",
+    };
+  }
+  if (bnplIsPartnerApplication(app)) {
+    return {
+      label: "Partner path",
+      className: "bg-sky-50 text-sky-800 border border-sky-200",
+    };
+  }
+  return {
+    label: "Troosolar",
+    className: "bg-slate-50 text-slate-700 border border-slate-200",
+  };
+}
+
 function bnplDisplayLoanAmount(app: Record<string, unknown> | null | undefined): number | null {
   if (!app) return null;
   const toNum = (v: unknown): number | null => {
@@ -3675,6 +3714,9 @@ const BNPLBuyNow: React.FC = () => {
                             Status
                           </th>
                           <th className="px-6 py-4 text-left text-sm font-medium text-black">
+                            Financing
+                          </th>
+                          <th className="px-6 py-4 text-left text-sm font-medium text-black">
                             Date
                           </th>
                           <th className="px-6 py-4 text-left text-sm font-medium text-black">
@@ -3760,7 +3802,7 @@ const BNPLBuyNow: React.FC = () => {
                     {items.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={7}
+                          colSpan={activeTab === "BNPL Applications" ? 8 : 7}
                           className="px-6 py-8 text-center text-gray-500"
                         >
                           No data found
@@ -3801,6 +3843,25 @@ const BNPLBuyNow: React.FC = () => {
                                 >
                                   {item.status}
                                 </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {(() => {
+                                  const fin = bnplFinancingTypeLabel(item as Record<string, unknown>);
+                                  return (
+                                    <span
+                                      className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-full ${fin.className}`}
+                                      title={
+                                        fin.label === "Partner offer"
+                                          ? "Admin sent a partner financing offer (still shown after approval)"
+                                          : fin.label === "Partner path"
+                                            ? "Customer chose partner financing (no partner offer saved yet)"
+                                            : "Troosolar financing"
+                                      }
+                                    >
+                                      {fin.label}
+                                    </span>
+                                  );
+                                })()}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                 {item.created_at ? formatDate(item.created_at) : "—"}
@@ -5116,14 +5177,26 @@ const BNPLBuyNow: React.FC = () => {
                   <>
                     {/* Application Overview */}
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-100">
-                      <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
                         <h3 className="text-lg font-bold text-gray-900">Application Overview</h3>
-                        <span
-                          className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-full"
-                          style={getStatusColor(selectedItem.status)}
-                        >
-                          {selectedItem.status || "N/A"}
-                        </span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span
+                            className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-full"
+                            style={getStatusColor(selectedItem.status)}
+                          >
+                            {selectedItem.status || "N/A"}
+                          </span>
+                          {(() => {
+                            const fin = bnplFinancingTypeLabel(selectedItem as Record<string, unknown>);
+                            return (
+                              <span
+                                className={`inline-flex items-center px-3 py-1.5 text-xs font-semibold rounded-full ${fin.className}`}
+                              >
+                                {fin.label}
+                              </span>
+                            );
+                          })()}
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                         <div>
