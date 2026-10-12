@@ -4567,6 +4567,239 @@ const BNPLBuyNow: React.FC = () => {
                       </div>
                     )}
 
+                    {/* Keep Financing Summary + Partner Offer visible on BNPL Orders after down payment */}
+                    {activeTab === "BNPL Orders" &&
+                      selectedItem.loan_application &&
+                      (() => {
+                        const la = selectedItem.loan_application as Record<string, unknown>;
+                        const snap =
+                          la.loan_plan_snapshot && typeof la.loan_plan_snapshot === "object"
+                            ? (la.loan_plan_snapshot as Record<string, unknown>)
+                            : null;
+                        const path = String(
+                          la.financing_path || (snap as any)?.financing?.path || ""
+                        ).toLowerCase();
+                        const isPartnerFinancing =
+                          path === "partner" ||
+                          String(la.credit_check_method || "").toLowerCase() === "partner";
+                        const pick = (...vals: unknown[]) => {
+                          for (const v of vals) {
+                            const n = bnplParseAmountCounter(v);
+                            if (n != null && Number.isFinite(n)) return n;
+                          }
+                          return 0;
+                        };
+                        const totalAmount = snap
+                          ? pick(snap.totalAmount, snap.grandTotal, snap.invoiceGrandTotal)
+                          : 0;
+                        const deposit = snap
+                          ? pick(snap.baseDepositAmount, snap.depositAmount)
+                          : 0;
+                        const loanAmt = snap
+                          ? pick(snap.totalLoanAmount, snap.principal) ||
+                            Math.max(totalAmount - deposit, 0)
+                          : 0;
+                        const tenor = snap
+                          ? Number(snap.tenor || la.repayment_duration) || 0
+                          : Number(la.repayment_duration) || 0;
+                        const depositPct = snap
+                          ? pick(snap.depositPercent, snap.deposit_percent)
+                          : 0;
+                        const depositPctLabel =
+                          depositPct > 0
+                            ? `${
+                                Math.abs(depositPct - Math.round(depositPct)) < 0.05
+                                  ? Math.round(depositPct)
+                                  : Math.round(depositPct * 100) / 100
+                              }%`
+                            : totalAmount > 0 && deposit > 0
+                              ? `${Math.round((deposit / totalAmount) * 100)}%`
+                              : null;
+                        const poDeposit = pick(la.partner_offer_initial_deposit);
+                        const poFees = pick(la.partner_offer_admin_fees);
+                        const poLoan = pick(la.partner_offer_loan_amount);
+                        const poTenor = Number(la.partner_offer_tenor) || 0;
+                        const poRate =
+                          la.partner_offer_interest_rate != null
+                            ? Number(la.partner_offer_interest_rate)
+                            : null;
+                        const poRepayStored = pick(la.partner_offer_repayment_amount);
+                        const poInterest =
+                          poLoan > 0 && poRate != null && Number.isFinite(poRate) && poTenor > 0
+                            ? Math.round(poLoan * (poRate / 100) * poTenor * 100) / 100
+                            : 0;
+                        const poRepay =
+                          poInterest > 0
+                            ? Math.round((poLoan + poInterest) * 100) / 100
+                            : poRepayStored;
+                        const poMonthly =
+                          poTenor > 0 && poRepay > 0
+                            ? Math.round((poRepay / poTenor) * 100) / 100
+                            : 0;
+                        let poDepositPct = pick(la.partner_offer_deposit_percent);
+                        if (!(poDepositPct > 0) && poDeposit > 0 && poLoan > 0) {
+                          poDepositPct = (poDeposit / (poDeposit + poLoan)) * 100;
+                        }
+                        const poDepositPctLabel =
+                          poDepositPct > 0
+                            ? `${
+                                Math.abs(poDepositPct - Math.round(poDepositPct)) < 0.05
+                                  ? Math.round(poDepositPct)
+                                  : Math.round(poDepositPct * 100) / 100
+                              }%`
+                            : null;
+                        const hasOriginal = totalAmount > 0 || loanAmt > 0 || deposit > 0;
+                        const hasPartnerOffer =
+                          poLoan > 0 || poDeposit > 0 || poRepay > 0;
+                        if (!hasOriginal && !hasPartnerOffer) return null;
+                        return (
+                          <div className="space-y-4">
+                            {hasOriginal && (
+                              <div className="bg-gradient-to-r from-slate-50 to-gray-50 rounded-xl shadow-sm border border-gray-200 p-6">
+                                <div className="flex items-center gap-3 mb-2">
+                                  <span className="text-[#273E8E] text-2xl font-bold" aria-hidden="true">
+                                    ₦
+                                  </span>
+                                  <h3 className="text-xl font-semibold text-gray-800">
+                                    {hasPartnerOffer
+                                      ? "Customer's Original Choice"
+                                      : isPartnerFinancing
+                                        ? "Partner Financing Summary"
+                                        : "Loan Summary"}
+                                  </h3>
+                                </div>
+                                <p className="text-sm text-gray-600 mb-4">
+                                  What the customer selected when they applied
+                                  {isPartnerFinancing ? " (Financing Summary)." : " (Loan Summary)."}
+                                </p>
+                                <div className="space-y-3">
+                                  {isPartnerFinancing ? (
+                                    <>
+                                      <div className="bg-white rounded-lg p-4 border border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                                        <p className="text-sm font-medium text-gray-800">Total Amount</p>
+                                        <p className="text-xl font-bold text-gray-800 tabular-nums">
+                                          {bnplFormatNaira(totalAmount)}
+                                        </p>
+                                      </div>
+                                      <div className="bg-white rounded-lg p-4 border border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                                        <p className="text-sm font-medium text-gray-800">
+                                          {depositPctLabel
+                                            ? `Initial Deposit (${depositPctLabel})`
+                                            : "Initial Deposit"}
+                                        </p>
+                                        <p className="text-xl font-bold text-red-600 tabular-nums">
+                                          −{bnplFormatNaira(deposit)}
+                                        </p>
+                                      </div>
+                                      <div className="bg-white rounded-lg p-4 border border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                                        <p className="text-sm font-medium text-gray-800">Total Loan Amount</p>
+                                        <p className="text-xl font-bold text-gray-800 tabular-nums">
+                                          {bnplFormatNaira(loanAmt)}
+                                        </p>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <div className="bg-white rounded-lg p-4 border border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                                        <p className="text-sm font-medium text-gray-800">
+                                          {depositPctLabel
+                                            ? `Initial Deposit (${depositPctLabel}) + Total Administrative Fees`
+                                            : "Initial Deposit + Total Administrative Fees"}
+                                        </p>
+                                        <p className="text-xl font-bold text-gray-800 tabular-nums">
+                                          {bnplFormatNaira(pick(snap?.depositAmount, deposit))}
+                                        </p>
+                                      </div>
+                                      <div className="bg-white rounded-lg p-4 border border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                                        <p className="text-sm font-medium text-gray-800">Total Loan Amount</p>
+                                        <p className="text-xl font-bold text-gray-800 tabular-nums">
+                                          {bnplFormatNaira(loanAmt)}
+                                        </p>
+                                      </div>
+                                    </>
+                                  )}
+                                  <div className="border-t border-gray-200 pt-3 mt-1">
+                                    <div className="bg-white rounded-lg p-4 border border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                                      <p className="text-sm font-medium text-gray-800">Loan Tenor</p>
+                                      <p className="text-xl font-bold text-[#273E8E]">
+                                        {tenor > 0
+                                          ? `${tenor} ${tenor === 1 ? "month" : "months"}`
+                                          : "—"}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            {hasPartnerOffer && (
+                              <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl shadow-sm border border-green-200 p-6">
+                                <div className="flex items-center gap-3 mb-2">
+                                  <span className="text-[#273E8E] text-2xl font-bold" aria-hidden="true">
+                                    ₦
+                                  </span>
+                                  <h3 className="text-xl font-semibold text-gray-800">
+                                    Partner Financing Offer
+                                  </h3>
+                                </div>
+                                <p className="text-sm text-gray-600 mb-4">
+                                  {(typeof la.partner_offer_writeup === "string" &&
+                                    String(la.partner_offer_writeup).trim()) ||
+                                    DEFAULT_PARTNER_OFFER_WRITEUP}
+                                </p>
+                                <div className="space-y-3">
+                                  {[
+                                    {
+                                      label: poDepositPctLabel
+                                        ? poFees > 0
+                                          ? `Initial Deposit (${poDepositPctLabel}) + Total Administrative Fees`
+                                          : `Initial Deposit (${poDepositPctLabel})`
+                                        : poFees > 0
+                                          ? "Initial Deposit + Total Administrative Fees"
+                                          : "Initial Deposit",
+                                      value: poDeposit + poFees,
+                                    },
+                                    { label: "Total Loan Amount", value: poLoan },
+                                    {
+                                      label:
+                                        poRate != null && poTenor > 0
+                                          ? `Total Interest Amount (${poRate}% × ${poTenor} mo)`
+                                          : "Total Interest Amount",
+                                      value: poInterest,
+                                    },
+                                    { label: "Total Repayment Amount", value: poRepay },
+                                    { label: "Monthly Repayment Amount", value: poMonthly },
+                                  ].map((row, index) => (
+                                    <div
+                                      key={row.label}
+                                      className="bg-white rounded-lg p-4 border border-green-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1"
+                                    >
+                                      <p className="text-sm font-medium text-gray-800">{row.label}</p>
+                                      <p
+                                        className={`text-xl font-bold tabular-nums ${
+                                          index === 4 ? "text-[#273E8E]" : "text-gray-800"
+                                        }`}
+                                      >
+                                        {bnplFormatNaira(row.value)}
+                                      </p>
+                                    </div>
+                                  ))}
+                                  <div className="border-t border-green-200 pt-3 mt-1">
+                                    <div className="bg-white rounded-lg p-4 border border-green-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                                      <p className="text-sm font-medium text-gray-800">Loan Tenor</p>
+                                      <p className="text-xl font-bold text-[#273E8E]">
+                                        {poTenor > 0
+                                          ? `${poTenor} ${poTenor === 1 ? "month" : "months"}`
+                                          : "—"}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
                     {activeTab === "BNPL Orders" &&
                       selectedItem.loan_application &&
                       (selectedItem.user_id ?? selectedItem.user?.id) != null && (
@@ -5280,8 +5513,13 @@ const BNPLBuyNow: React.FC = () => {
                               },
                             ];
 
+                        const hasPartnerOfferFields =
+                          bnplParseAmountCounter(selectedItem.partner_offer_loan_amount) > 0 ||
+                          bnplParseAmountCounter(selectedItem.partner_offer_initial_deposit) > 0 ||
+                          bnplParseAmountCounter(selectedItem.partner_offer_repayment_amount) > 0;
                         const isPartnerOfferView =
-                          String(selectedItem.status || "").toLowerCase() === "partner_offer";
+                          String(selectedItem.status || "").toLowerCase() === "partner_offer" ||
+                          hasPartnerOfferFields;
                         return (
                           <div
                             className={`rounded-xl shadow-sm border p-6 ${
@@ -5358,21 +5596,34 @@ const BNPLBuyNow: React.FC = () => {
                         );
                       })()}
 
-                    {/* Same Partner Financing Offer breakdown the customer sees */}
-                    {String(selectedItem.status || "").toLowerCase() === "partner_offer" &&
-                      (() => {
-                        const deposit = bnplParseAmountCounter(selectedItem.partner_offer_initial_deposit);
-                        const fees = bnplParseAmountCounter(selectedItem.partner_offer_admin_fees);
-                        const upfrontDue = deposit + fees;
-                        const loanAmount = bnplParseAmountCounter(selectedItem.partner_offer_loan_amount);
-                        const tenor = Number(selectedItem.partner_offer_tenor) || 0;
-                        const interestRate =
-                          selectedItem.partner_offer_interest_rate != null
-                            ? Number(selectedItem.partner_offer_interest_rate)
-                            : null;
-                        const storedRepayment = bnplParseAmountCounter(
-                          selectedItem.partner_offer_repayment_amount
+                    {/* Same Partner Financing Offer breakdown the customer sees (keep after approval) */}
+                    {(() => {
+                        const la = (selectedItem.loan_application || selectedItem) as Record<string, unknown>;
+                        const deposit = bnplParseAmountCounter(
+                          selectedItem.partner_offer_initial_deposit ?? la.partner_offer_initial_deposit
                         );
+                        const fees = bnplParseAmountCounter(
+                          selectedItem.partner_offer_admin_fees ?? la.partner_offer_admin_fees
+                        );
+                        const upfrontDue = deposit + fees;
+                        const loanAmount = bnplParseAmountCounter(
+                          selectedItem.partner_offer_loan_amount ?? la.partner_offer_loan_amount
+                        );
+                        const tenor =
+                          Number(selectedItem.partner_offer_tenor ?? la.partner_offer_tenor) || 0;
+                        const interestRaw =
+                          selectedItem.partner_offer_interest_rate ?? la.partner_offer_interest_rate;
+                        const interestRate =
+                          interestRaw != null && interestRaw !== "" ? Number(interestRaw) : null;
+                        const storedRepayment = bnplParseAmountCounter(
+                          selectedItem.partner_offer_repayment_amount ?? la.partner_offer_repayment_amount
+                        );
+                        const hasPartnerOfferTerms =
+                          loanAmount > 0 ||
+                          upfrontDue > 0 ||
+                          storedRepayment > 0 ||
+                          String(selectedItem.status || "").toLowerCase() === "partner_offer";
+                        if (!hasPartnerOfferTerms) return null;
                         const computedInterest =
                           loanAmount > 0 &&
                           interestRate != null &&
@@ -5403,7 +5654,7 @@ const BNPLBuyNow: React.FC = () => {
                             : "Total Interest Amount";
                         // Use partner-offer % (admin-set), not the customer's original snapshot %.
                         let depositPct = bnplParseAmountCounter(
-                          selectedItem.partner_offer_deposit_percent
+                          selectedItem.partner_offer_deposit_percent ?? la.partner_offer_deposit_percent
                         );
                         if (!(depositPct > 0) && deposit > 0 && loanAmount > 0) {
                           depositPct = (deposit / (deposit + loanAmount)) * 100;
@@ -5434,7 +5685,18 @@ const BNPLBuyNow: React.FC = () => {
                         ];
                         const docs = Array.isArray(selectedItem.partner_offer_documents)
                           ? selectedItem.partner_offer_documents
-                          : [];
+                          : Array.isArray(la.partner_offer_documents)
+                            ? (la.partner_offer_documents as unknown[])
+                            : [];
+                        const writeup =
+                          (typeof selectedItem.partner_offer_writeup === "string" &&
+                            selectedItem.partner_offer_writeup.trim()) ||
+                          (typeof la.partner_offer_writeup === "string" &&
+                            String(la.partner_offer_writeup).trim()) ||
+                          DEFAULT_PARTNER_OFFER_WRITEUP;
+                        const notes =
+                          selectedItem.admin_notes ||
+                          (typeof la.admin_notes === "string" ? la.admin_notes : null);
                         return (
                           <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl shadow-sm border border-green-200 p-6">
                             <div className="flex items-center gap-3 mb-2">
@@ -5449,17 +5711,15 @@ const BNPLBuyNow: React.FC = () => {
                               Same breakdown shown to the customer on their loan details page.
                             </p>
                             <p className="text-sm text-gray-600 mb-4">
-                              {(typeof selectedItem.partner_offer_writeup === "string" &&
-                                selectedItem.partner_offer_writeup.trim()) ||
-                                DEFAULT_PARTNER_OFFER_WRITEUP}
+                              {writeup}
                               {docs.length > 0
                                 ? " Supporting documents were emailed to the customer."
                                 : ""}
                             </p>
-                            {selectedItem.admin_notes && (
+                            {notes && (
                               <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                                 <p className="text-sm text-gray-700">
-                                  <strong>Admin Note:</strong> {selectedItem.admin_notes}
+                                  <strong>Admin Note:</strong> {notes}
                                 </p>
                               </div>
                             )}
