@@ -248,26 +248,57 @@ function bnplParseAmountCounter(v: unknown): number {
 }
 
 /**
- * Same “bundle” as LoanCalculator.jsx `totalAmount`: cart grand total (principal + equity), not net of admin fees.
- * Prefer principal + baseDepositAmount from the stored snapshot (authoritative); else totalAmount − admin fees.
+ * Loan calculator total (principal + equity deposit) — same as LoanCalculator `grandTotal` / `totalAmount`.
+ * Deposit % and loan principal are based on this figure.
  */
-function bnplBundlePriceFromSnapshotForCounter(snap: Record<string, unknown> | null | undefined): number {
+function bnplLoanCalculatorTotalFromSnapshotForCounter(
+  snap: Record<string, unknown> | null | undefined
+): number {
   if (!snap || typeof snap !== "object") return 0;
   const principal = bnplParseAmountCounter(snap.principal ?? snap.totalLoanAmount);
   const baseDep = bnplParseAmountCounter(snap.baseDepositAmount);
   if (principal > 0 && baseDep >= 0) {
     return Math.max(principal + baseDep, 0);
   }
+  const grand =
+    bnplParseAmountCounter(snap.grandTotal) ||
+    bnplParseAmountCounter(snap.invoiceGrandTotal);
+  if (grand > 0) return grand;
+  // After Review proceed, totalAmount may be grandTotal + admin fees — strip fees if present.
   const totalAmount = bnplParseAmountCounter(snap.totalAmount);
-  let adminFees = bnplParseAmountCounter(snap.adminFeesTotal);
+  let adminFees = bnplParseAmountCounter(snap.adminFeesTotal ?? snap.feesTotal);
   if (adminFees <= 0) {
     adminFees =
       bnplParseAmountCounter(snap.insuranceFee) +
       bnplParseAmountCounter(snap.managementFee) +
       bnplParseAmountCounter(snap.legalFee);
   }
-  if (totalAmount > 0) return Math.max(totalAmount - adminFees, 0);
+  if (totalAmount > 0 && adminFees > 0) return Math.max(totalAmount - adminFees, 0);
+  if (totalAmount > 0) return totalAmount;
   return 0;
+}
+
+/**
+ * Catalog bundle / product subtotal for insurance — same as LoanCalculator `bundlePrice` prop.
+ * Insurance is 1% (or settings %) of this, NOT of the loan calculator total.
+ */
+function bnplCatalogBundlePriceFromSnapshotForCounter(
+  snap: Record<string, unknown> | null | undefined
+): number {
+  if (!snap || typeof snap !== "object") return 0;
+  const fromSnap =
+    bnplParseAmountCounter(snap.bundlePrice) ||
+    bnplParseAmountCounter(snap.netAmount) ||
+    bnplParseAmountCounter(snap.amountExcludingVat) ||
+    bnplParseAmountCounter(snap.catalogSubtotal);
+  if (fromSnap > 0) return fromSnap;
+  // Last resort: do not invent a wrong base — caller may fall back to loan calculator total.
+  return 0;
+}
+
+/** @deprecated Use bnplLoanCalculatorTotalFromSnapshotForCounter */
+function bnplBundlePriceFromSnapshotForCounter(snap: Record<string, unknown> | null | undefined): number {
+  return bnplLoanCalculatorTotalFromSnapshotForCounter(snap);
 }
 
 function bnplFeePctsForCounter(snap: Record<string, unknown> | null | undefined): {
@@ -299,6 +330,7 @@ function bnplInterestMonthlyForCounter(snap: Record<string, unknown> | null | un
 
 type BnplCounterPlan = {
   bundlePrice: number;
+  catalogBundlePrice: number;
   depositPercent: number;
   baseDeposit: number;
   baseLoanAmount: number;
@@ -313,21 +345,32 @@ type BnplCounterPlan = {
   monthlyRepaymentAmount: number;
 };
 
+/**
+ * Matches LoanCalculator.jsx Troosolar full breakdown:
+ * - deposit % and loan amount from loan calculator total (grand total)
+ * - insurance % of catalog bundle price
+ * - management/legal % of loan amount
+ */
 function bnplComputeCounterOfferPlan(
-  bundlePrice: number,
+  loanCalculatorTotal: number,
   depositPercentOfBundle: number,
   tenorMonths: number,
   interestMonthlyPercent: number,
-  feePcts: { insurance: number; management: number; legal: number }
+  feePcts: { insurance: number; management: number; legal: number },
+  catalogBundlePrice?: number
 ): BnplCounterPlan | null {
-  if (bundlePrice <= 0 || tenorMonths <= 0) return null;
+  if (loanCalculatorTotal <= 0 || tenorMonths <= 0) return null;
   const i = feePcts.insurance / 100;
   const m = feePcts.management / 100;
   const l = feePcts.legal / 100;
-  // LoanCalculator.jsx: depositAmount = (totalAmount * depositPercent) / 100; principal = totalAmount - depositAmount
-  const baseDeposit = (bundlePrice * depositPercentOfBundle) / 100;
-  const baseLoanAmount = Math.max(bundlePrice - baseDeposit, 0);
-  const insuranceFee = Math.round(bundlePrice * i * 100) / 100;
+  const insuranceBase =
+    catalogBundlePrice != null && catalogBundlePrice > 0
+      ? catalogBundlePrice
+      : loanCalculatorTotal;
+  // LoanCalculator.jsx: depositAmount = (grandTotal * depositPercent) / 100; principal = grandTotal - depositAmount
+  const baseDeposit = (loanCalculatorTotal * depositPercentOfBundle) / 100;
+  const baseLoanAmount = Math.max(loanCalculatorTotal - baseDeposit, 0);
+  const insuranceFee = Math.round(insuranceBase * i * 100) / 100;
   const managementFee = Math.round(baseLoanAmount * m * 100) / 100;
   const legalFee = Math.round(baseLoanAmount * l * 100) / 100;
   const adminFeesTotal = Math.round((insuranceFee + managementFee + legalFee) * 100) / 100;
@@ -339,7 +382,8 @@ function bnplComputeCounterOfferPlan(
   const monthlyRepaymentAmount =
     tenorMonths > 0 ? Math.round((totalRepaymentAmount / tenorMonths) * 100) / 100 : 0;
   return {
-    bundlePrice,
+    bundlePrice: loanCalculatorTotal,
+    catalogBundlePrice: insuranceBase,
     depositPercent: depositPercentOfBundle,
     baseDeposit,
     baseLoanAmount,
@@ -413,7 +457,8 @@ function bnplPlanFromSnapshotForCounter(
   snap: Record<string, unknown> | null | undefined
 ): BnplCounterPlan | null {
   if (!snap || typeof snap !== "object") return null;
-  const bundle = bnplBundlePriceFromSnapshotForCounter(snap);
+  const loanCalcTotal = bnplLoanCalculatorTotalFromSnapshotForCounter(snap);
+  const catalogBundle = bnplCatalogBundlePriceFromSnapshotForCounter(snap);
   const depositPercent = bnplParseAmountCounter(snap.depositPercent);
   const baseDeposit = bnplParseAmountCounter(snap.baseDepositAmount);
   const totalLoanAmount = bnplParseAmountCounter(snap.totalLoanAmount ?? snap.principal);
@@ -426,7 +471,7 @@ function bnplPlanFromSnapshotForCounter(
   const totalRepaymentAmount = bnplParseAmountCounter(snap.totalRepaymentAmount ?? snap.totalRepayment);
   const monthlyRepaymentAmount = bnplParseAmountCounter(snap.monthlyRepaymentAmount ?? snap.monthlyRepayment);
   if (
-    bundle <= 0 ||
+    loanCalcTotal <= 0 ||
     totalLoanAmount <= 0 ||
     totalRepaymentAmount <= 0 ||
     monthlyRepaymentAmount <= 0 ||
@@ -435,7 +480,8 @@ function bnplPlanFromSnapshotForCounter(
     return null;
   }
   return {
-    bundlePrice: bundle,
+    bundlePrice: loanCalcTotal,
+    catalogBundlePrice: catalogBundle > 0 ? catalogBundle : loanCalcTotal,
     depositPercent,
     baseDeposit,
     baseLoanAmount: totalLoanAmount,
@@ -452,19 +498,26 @@ function bnplPlanFromSnapshotForCounter(
 }
 
 function bnplDepositPercentFromUpfrontTotal(
-  bundlePrice: number,
+  loanCalculatorTotal: number,
   upfrontTotal: number,
-  feePcts: { insurance: number; management: number; legal: number }
+  feePcts: { insurance: number; management: number; legal: number },
+  catalogBundlePrice?: number
 ): number {
-  if (bundlePrice <= 0 || upfrontTotal <= 0) return 0;
+  if (loanCalculatorTotal <= 0 || upfrontTotal <= 0) return 0;
   const i = feePcts.insurance / 100;
   const m = feePcts.management / 100;
   const l = feePcts.legal / 100;
   const denom = 1 - m - l;
   if (denom <= 0.0001) return 0;
-  const baseDeposit = (upfrontTotal - bundlePrice * (i + m + l)) / denom;
+  const insuranceBase =
+    catalogBundlePrice != null && catalogBundlePrice > 0
+      ? catalogBundlePrice
+      : loanCalculatorTotal;
+  // upfront = baseDeposit + insuranceBase*i + (loanCalcTotal - baseDeposit)*(m+l)
+  const baseDeposit =
+    (upfrontTotal - insuranceBase * i - loanCalculatorTotal * (m + l)) / denom;
   if (baseDeposit <= 0) return 0;
-  return Math.min(100, (baseDeposit / bundlePrice) * 100);
+  return Math.min(100, (baseDeposit / loanCalculatorTotal) * 100);
 }
 
 /** Bundle/product lines from API ordered_items or product_category fallback. */
@@ -719,6 +772,9 @@ const BNPLBuyNow: React.FC = () => {
   const [savingGuarantor, setSavingGuarantor] = useState(false);
   const [savingInstallationAccept, setSavingInstallationAccept] = useState(false);
   const [savingInstallationReject, setSavingInstallationReject] = useState(false);
+  const [showInstallationRejectForm, setShowInstallationRejectForm] = useState(false);
+  const [installationRejectProposedDate, setInstallationRejectProposedDate] = useState("");
+  const [installationRejectNote, setInstallationRejectNote] = useState("");
   // Send to Partner (like loan flow - before approving)
   const [showSendToPartnerModal, setShowSendToPartnerModal] = useState(false);
   const [selectedPartnerIdsForSend, setSelectedPartnerIdsForSend] = useState<number[]>([]);
@@ -1596,6 +1652,9 @@ const BNPLBuyNow: React.FC = () => {
 
   const handleViewDetails = async (item: any) => {
     setSelectedItem(item);
+    setShowInstallationRejectForm(false);
+    setInstallationRejectProposedDate("");
+    setInstallationRejectNote("");
     setDetailModalTab("Details");
     setOrderSummary(null);
     setOrderInvoice(null);
@@ -1698,17 +1757,18 @@ const BNPLBuyNow: React.FC = () => {
       item?.loan_plan_snapshot && typeof item.loan_plan_snapshot === "object"
         ? (item.loan_plan_snapshot as Record<string, unknown>)
         : null;
-    const bundle = bnplBundlePriceFromSnapshotForCounter(snap ?? undefined);
+    const bundle = bnplLoanCalculatorTotalFromSnapshotForCounter(snap ?? undefined);
+    const catalogBundle = bnplCatalogBundlePriceFromSnapshotForCounter(snap ?? undefined);
     const feePcts = bnplFeePctsForCounter(snap ?? undefined);
     const existingUpfront = Number(item?.counter_offer_min_deposit ?? 0);
     let depositPercentStr = "";
     if (existingUpfront > 0 && bundle > 0) {
-      const pct = bnplDepositPercentFromUpfrontTotal(bundle, existingUpfront, feePcts);
+      const pct = bnplDepositPercentFromUpfrontTotal(bundle, existingUpfront, feePcts, catalogBundle);
       depositPercentStr = pct > 0 ? String(Math.round(pct * 100) / 100) : "";
     } else if (snap) {
       const upfrontOrig = bnplParseAmountCounter(snap.depositAmount);
       if (upfrontOrig > 0 && bundle > 0) {
-        const p = bnplDepositPercentFromUpfrontTotal(bundle, upfrontOrig, feePcts);
+        const p = bnplDepositPercentFromUpfrontTotal(bundle, upfrontOrig, feePcts, catalogBundle);
         if (p > 0) {
           depositPercentStr = String(Math.round(p * 100) / 100);
         } else {
@@ -1883,7 +1943,8 @@ const BNPLBuyNow: React.FC = () => {
         selectedItem?.loan_plan_snapshot && typeof selectedItem.loan_plan_snapshot === "object"
           ? (selectedItem.loan_plan_snapshot as Record<string, unknown>)
           : null;
-      const bundle = bnplBundlePriceFromSnapshotForCounter(snap ?? undefined);
+      const bundle = bnplLoanCalculatorTotalFromSnapshotForCounter(snap ?? undefined);
+      const catalogBundle = bnplCatalogBundlePriceFromSnapshotForCounter(snap ?? undefined);
       if (bundle <= 0) {
         alert(
           "Cannot set counter offer: bundle price could not be read from the application loan plan snapshot. Open application details to refresh data, or ensure the customer applied via the current BNPL flow."
@@ -1904,7 +1965,7 @@ const BNPLBuyNow: React.FC = () => {
         Math.abs(tenor - snapTenor) < 0.01;
       const plan = shouldUseSnapshotPlan
         ? snapPlan
-        : bnplComputeCounterOfferPlan(bundle, percent, tenor, interestM, feePcts);
+        : bnplComputeCounterOfferPlan(bundle, percent, tenor, interestM, feePcts, catalogBundle);
       if (!plan) {
         alert("Could not compute counter-offer amounts. Check deposit % and tenor.");
         return;
@@ -2110,8 +2171,13 @@ const BNPLBuyNow: React.FC = () => {
   };
 
   const getStatusColor = (status: string) => {
-    const statusLower = status.toLowerCase();
-    if (statusLower === "approved" || statusLower === "delivered" || statusLower === "completed") {
+    const statusLower = String(status || "").toLowerCase();
+    if (
+      statusLower === "approved" ||
+      statusLower === "delivered" ||
+      statusLower === "completed" ||
+      statusLower === "payment_complete"
+    ) {
       return { backgroundColor: "#10B981", color: "white" };
     }
     if (statusLower === "pending" || statusLower === "processing") {
@@ -2125,6 +2191,36 @@ const BNPLBuyNow: React.FC = () => {
     }
     return { backgroundColor: "#6B7280", color: "white" };
   };
+
+  /** Display order_status, preferring Payment Complete when all installments are paid. */
+  const getBnplOrderDisplayStatus = (item: any): string => {
+    if (!item) return "";
+    const rs = item.repayment_summary;
+    const fullyPaid =
+      item.loan_fully_paid === true ||
+      rs?.loan_fully_paid === true ||
+      (Number(rs?.total_installments ?? 0) > 0 &&
+        Number(rs?.pending_installments ?? 0) === 0 &&
+        Number(rs?.paid_installments ?? 0) >= Number(rs?.total_installments ?? 0)) ||
+      (Array.isArray(item.repayment_schedule) &&
+        item.repayment_schedule.length > 0 &&
+        item.repayment_schedule.every(
+          (i: any) =>
+            String(i?.status || i?.computed_status || "").toLowerCase() === "paid"
+        ));
+    if (fullyPaid) return "payment_complete";
+    return String(item.order_status || item.status || "");
+  };
+
+  const formatBnplStatusLabel = (status: string): string => {
+    const s = String(status || "").trim();
+    if (!s) return "N/A";
+    if (s.toLowerCase() === "payment_complete") return "Payment Complete";
+    return s.replace(/_/g, " ");
+  };
+
+  /** @deprecated alias — prefer formatBnplStatusLabel */
+  const formatBnplOrderStatusLabel = formatBnplStatusLabel;
 
   const formatCurrency = (amount: number | string) => {
     return `₦${Number(amount).toLocaleString()}`;
@@ -3838,10 +3934,10 @@ const BNPLBuyNow: React.FC = () => {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <span
-                                  className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-full"
+                                  className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-full capitalize"
                                   style={getStatusColor(item.status)}
                                 >
-                                  {item.status}
+                                  {formatBnplStatusLabel(item.status)}
                                 </span>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
@@ -3938,10 +4034,10 @@ const BNPLBuyNow: React.FC = () => {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <span
-                                  className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-full"
-                                  style={getStatusColor(item.order_status)}
+                                  className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-full capitalize"
+                                  style={getStatusColor(getBnplOrderDisplayStatus(item))}
                                 >
-                                  {item.order_status}
+                                  {formatBnplOrderStatusLabel(getBnplOrderDisplayStatus(item))}
                                 </span>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
@@ -4179,7 +4275,10 @@ const BNPLBuyNow: React.FC = () => {
             {(activeTab === "Buy Now Orders" || activeTab === "BNPL Orders") && (
               <div className="border-b border-gray-200 mb-4">
                 <nav className="-mb-px flex space-x-8">
-                  {["Details", "Summary", "Invoice"].map((tab) => (
+                  {(activeTab === "BNPL Orders"
+                    ? ["Details", "Payments", "Summary", "Invoice"]
+                    : ["Details", "Summary", "Invoice"]
+                  ).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => {
@@ -4222,12 +4321,12 @@ const BNPLBuyNow: React.FC = () => {
                               Payment: {selectedItem.payment_status}
                             </span>
                           )}
-                          {selectedItem.order_status && (
+                          {(selectedItem.order_status || selectedItem.loan_fully_paid) && (
                             <span
-                              className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-full"
-                              style={getStatusColor(selectedItem.order_status)}
+                              className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-full capitalize"
+                              style={getStatusColor(getBnplOrderDisplayStatus(selectedItem))}
                             >
-                              {selectedItem.order_status}
+                              {formatBnplOrderStatusLabel(getBnplOrderDisplayStatus(selectedItem))}
                             </span>
                           )}
                         </div>
@@ -4923,255 +5022,72 @@ const BNPLBuyNow: React.FC = () => {
                             </p>
                           </div>
                         )}
-                        {selectedItem.order_status && (
+                        {(selectedItem.order_status || selectedItem.loan_fully_paid) && (
                           <div className="bg-gray-50 rounded-lg p-4">
                             <p className="text-xs text-gray-500 mb-1">Order Status</p>
                             <p className="text-lg font-bold text-gray-900 capitalize">
-                              {selectedItem.order_status}
+                              {formatBnplOrderStatusLabel(getBnplOrderDisplayStatus(selectedItem))}
                             </p>
+                          </div>
+                        )}
+                        {activeTab === "BNPL Orders" && (
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <p className="text-xs text-gray-500 mb-1">Down payment</p>
+                            <p className="text-lg font-bold text-gray-900">
+                              {["paid", "completed", "success"].includes(
+                                String(selectedItem.payment_status || "").toLowerCase()
+                              )
+                                ? "Paid"
+                                : "Not paid / pending"}
+                            </p>
+                            {(selectedItem.loan_details?.down_payment != null ||
+                              selectedItem.mono_calculation?.down_payment != null) && (
+                              <p className="text-sm text-[#273E8E] font-semibold mt-1">
+                                {formatCurrency(
+                                  selectedItem.loan_details?.down_payment ??
+                                    selectedItem.mono_calculation?.down_payment
+                                )}
+                              </p>
+                            )}
                           </div>
                         )}
                       </div>
                     </div>
 
-                    {activeTab === "BNPL Orders" && (() => {
-                      const rs = selectedItem.repayment_summary;
-                      const schedule: any[] = Array.isArray(selectedItem.repayment_schedule)
-                        ? selectedItem.repayment_schedule
-                        : [];
-                      const history: any[] = Array.isArray(selectedItem.repayment_history)
-                        ? selectedItem.repayment_history
-                        : [];
-                      const paidInstallments = schedule.filter(
-                        (i) => i.status === "paid" || i.computed_status === "paid"
-                      );
-                      const customerName =
-                        rs?.order_customer_name ||
-                        `${selectedItem.user?.first_name || ""} ${selectedItem.user?.sur_name || ""}`.trim() ||
-                        "—";
-                      const customerEmail =
-                        rs?.order_customer_email || selectedItem.user?.email || null;
-                      const customerId = rs?.order_customer_id ?? selectedItem.user?.id;
-
-                      return (
-                        <div className="space-y-6">
-                          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-6">
-                            <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                              <svg className="w-5 h-5 text-[#273E8E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                              </svg>
-                              Customer repayment summary
-                            </h3>
-                            <p className="text-sm text-gray-600 mb-4">
-                              Payments on this BNPL order are attributed to the customer below. When a linked transaction exists, the payer shown is taken from that payment record.
+                    {activeTab === "BNPL Orders" && (
+                      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-6">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900">Customer payments &amp; monthly schedule</h3>
+                            <p className="text-sm text-gray-600 mt-1">
+                              After down payment, track paid / pending / overdue installments and the full monthly
+                              breakdown on the <strong>Payments</strong> tab (same view the customer sees).
                             </p>
-                            <div className="bg-white/80 rounded-lg border border-blue-100 p-4 mb-4">
-                              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Order customer</p>
-                              <p className="text-base font-semibold text-gray-900">{customerName}</p>
-                              <div className="mt-1 text-sm text-gray-600 flex flex-wrap gap-x-3 gap-y-1">
-                                {customerId != null && <span>User ID: #{customerId}</span>}
-                                {customerEmail && <span>{customerEmail}</span>}
-                              </div>
-                            </div>
-                            {rs ? (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                                <div className="bg-white rounded-lg p-4 border border-blue-100">
-                                  <p className="text-xs text-gray-500 mb-1">Total repayment</p>
-                                  <p className="text-xl font-bold text-gray-900">{formatCurrency(rs.total_amount ?? 0)}</p>
-                                </div>
-                                <div className="bg-white rounded-lg p-4 border border-blue-100">
-                                  <p className="text-xs text-gray-500 mb-1">Paid</p>
-                                  <p className="text-xl font-bold text-green-700">{formatCurrency(rs.paid_amount ?? 0)}</p>
-                                </div>
-                                <div className="bg-white rounded-lg p-4 border border-blue-100">
-                                  <p className="text-xs text-gray-500 mb-1">Pending</p>
-                                  <p className="text-xl font-bold text-amber-700">{formatCurrency(rs.pending_amount ?? 0)}</p>
-                                </div>
-                                <div className="bg-white rounded-lg p-4 border border-blue-100">
-                                  <p className="text-xs text-gray-500 mb-1">Overdue (installments)</p>
-                                  <p className="text-xl font-bold text-red-700">{formatCurrency(rs.overdue_amount ?? 0)}</p>
-                                </div>
-                              </div>
-                            ) : (
-                              <p className="text-sm text-gray-600">No repayment summary available for this order.</p>
-                            )}
-                            {rs && (
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-center text-sm">
-                                <div className="bg-white/90 rounded-lg py-2 px-2 border border-blue-50">
-                                  <span className="text-gray-500 block text-xs">Installments</span>
-                                  <span className="font-bold text-gray-900">{rs.total_installments ?? 0}</span>
-                                </div>
-                                <div className="bg-white/90 rounded-lg py-2 px-2 border border-blue-50">
-                                  <span className="text-gray-500 block text-xs">Paid</span>
-                                  <span className="font-bold text-green-700">{rs.paid_installments ?? 0}</span>
-                                </div>
-                                <div className="bg-white/90 rounded-lg py-2 px-2 border border-blue-50">
-                                  <span className="text-gray-500 block text-xs">Pending</span>
-                                  <span className="font-bold text-amber-700">{rs.pending_installments ?? 0}</span>
-                                </div>
-                                <div className="bg-white/90 rounded-lg py-2 px-2 border border-blue-50">
-                                  <span className="text-gray-500 block text-xs">Overdue</span>
-                                  <span className="font-bold text-red-700">{rs.overdue_installments ?? 0}</span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="bg-white rounded-lg border border-gray-200 p-6">
-                            <h3 className="text-lg font-semibold text-gray-900 mb-2">Payments recorded</h3>
-                            <p className="text-sm text-gray-600 mb-4">
-                              Installments marked paid and repayment log entries. Payer name uses the linked transaction user when available; otherwise the order customer is shown.
-                            </p>
-                            {paidInstallments.length === 0 && history.length === 0 ? (
-                              <p className="text-sm text-gray-500 italic">No payments recorded yet.</p>
-                            ) : (
-                              <div className="space-y-4">
-                                {paidInstallments.length > 0 && (
-                                  <div>
-                                    <h4 className="text-sm font-semibold text-gray-800 mb-2">Paid installments</h4>
-                                    <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                                      <table className="min-w-full text-sm">
-                                        <thead className="bg-gray-50 text-left text-gray-600">
-                                          <tr>
-                                            <th className="px-3 py-2 font-medium">#</th>
-                                            <th className="px-3 py-2 font-medium">Amount</th>
-                                            <th className="px-3 py-2 font-medium">Paid at</th>
-                                            <th className="px-3 py-2 font-medium">Recorded payer</th>
-                                            <th className="px-3 py-2 font-medium">Method / ref</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-100">
-                                          {paidInstallments.map((inst: any) => (
-                                            <tr key={inst.id ?? `${inst.installment_number}-${inst.paid_at}`}>
-                                              <td className="px-3 py-2">{inst.installment_number ?? "—"}</td>
-                                              <td className="px-3 py-2 font-medium">{formatCurrency(inst.amount)}</td>
-                                              <td className="px-3 py-2 text-gray-700">
-                                                {inst.paid_at ? formatDate(inst.paid_at) : "—"}
-                                              </td>
-                                              <td className="px-3 py-2">
-                                                <span className="font-medium text-gray-900">
-                                                  {inst.paid_by_display ||
-                                                    inst.transaction?.payer_name ||
-                                                    customerName}
-                                                </span>
-                                                {inst.transaction?.payer_email && (
-                                                  <span className="block text-xs text-gray-500">{inst.transaction.payer_email}</span>
-                                                )}
-                                              </td>
-                                              <td className="px-3 py-2 text-gray-700">
-                                                {inst.transaction?.method || "—"}
-                                                {inst.transaction?.tx_id && (
-                                                  <span className="block text-xs text-gray-500 truncate max-w-[140px]" title={inst.transaction.tx_id}>
-                                                    {inst.transaction.tx_id}
-                                                  </span>
-                                                )}
-                                              </td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  </div>
+                            {selectedItem.repayment_summary && (
+                              <p className="text-sm text-gray-700 mt-2">
+                                {getBnplOrderDisplayStatus(selectedItem) === "payment_complete" ? (
+                                  <>All installments paid · Payment Complete</>
+                                ) : (
+                                  <>
+                                    Paid {formatCurrency(selectedItem.repayment_summary.paid_amount ?? 0)} · Pending{" "}
+                                    {formatCurrency(selectedItem.repayment_summary.pending_amount ?? 0)} ·{" "}
+                                    {selectedItem.repayment_summary.pending_installments ?? 0} installment(s) left
+                                  </>
                                 )}
-                                {history.length > 0 && (
-                                  <div>
-                                    <h4 className="text-sm font-semibold text-gray-800 mb-2">Repayment log</h4>
-                                    <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                                      <table className="min-w-full text-sm">
-                                        <thead className="bg-gray-50 text-left text-gray-600">
-                                          <tr>
-                                            <th className="px-3 py-2 font-medium">Amount</th>
-                                            <th className="px-3 py-2 font-medium">Status</th>
-                                            <th className="px-3 py-2 font-medium">When</th>
-                                            <th className="px-3 py-2 font-medium">Recorded payer</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-100">
-                                          {history.map((h: any) => (
-                                            <tr key={h.id}>
-                                              <td className="px-3 py-2 font-medium">{formatCurrency(h.amount)}</td>
-                                              <td className="px-3 py-2 capitalize">{h.status || "—"}</td>
-                                              <td className="px-3 py-2 text-gray-700">{h.created_at ? formatDate(h.created_at) : "—"}</td>
-                                              <td className="px-3 py-2">
-                                                <span className="font-medium text-gray-900">{h.payer_name || customerName}</span>
-                                                {h.payer_email && (
-                                                  <span className="block text-xs text-gray-500">{h.payer_email}</span>
-                                                )}
-                                              </td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="bg-white rounded-lg border border-gray-200 p-6">
-                            <h3 className="text-lg font-semibold text-gray-900 mb-2">Repayment schedule</h3>
-                            <p className="text-sm text-gray-600 mb-4">
-                              Full installment plan for this order (same data customers see on the dashboard).
-                            </p>
-                            {schedule.length === 0 ? (
-                              <p className="text-sm text-gray-500 italic">
-                                No installments found. The schedule may appear after the loan is activated and installments are generated.
                               </p>
-                            ) : (
-                              <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                                <table className="min-w-full text-sm">
-                                  <thead className="bg-gray-50 text-left text-gray-600">
-                                    <tr>
-                                      <th className="px-3 py-2 font-medium">#</th>
-                                      <th className="px-3 py-2 font-medium">Due date</th>
-                                      <th className="px-3 py-2 font-medium">Amount</th>
-                                      <th className="px-3 py-2 font-medium">Status</th>
-                                      <th className="px-3 py-2 font-medium">Paid at</th>
-                                      <th className="px-3 py-2 font-medium">Payer (if paid)</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-gray-100">
-                                    {schedule.map((inst: any) => {
-                                      const st = inst.computed_status || inst.status;
-                                      const isPaid = inst.status === "paid" || st === "paid";
-                                      return (
-                                        <tr key={inst.id ?? `${inst.installment_number}-${inst.payment_date}`}>
-                                          <td className="px-3 py-2">{inst.installment_number ?? "—"}</td>
-                                          <td className="px-3 py-2">{inst.payment_date ? formatDate(inst.payment_date) : "—"}</td>
-                                          <td className="px-3 py-2 font-medium">{formatCurrency(inst.amount)}</td>
-                                          <td className="px-3 py-2">
-                                            <span
-                                              className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                                                isPaid
-                                                  ? "bg-green-100 text-green-800"
-                                                  : inst.is_overdue || st === "overdue"
-                                                    ? "bg-red-100 text-red-800"
-                                                    : "bg-amber-100 text-amber-800"
-                                              }`}
-                                            >
-                                              {String(st || "pending").replace(/_/g, " ")}
-                                            </span>
-                                          </td>
-                                          <td className="px-3 py-2 text-gray-700">
-                                            {inst.paid_at ? formatDate(inst.paid_at) : "—"}
-                                          </td>
-                                          <td className="px-3 py-2 text-gray-800">
-                                            {isPaid
-                                              ? inst.paid_by_display || inst.transaction?.payer_name || customerName
-                                              : "—"}
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
                             )}
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => setDetailModalTab("Payments")}
+                            className="shrink-0 bg-[#273E8E] hover:bg-[#1e3270] text-white px-4 py-2 rounded-lg text-sm font-medium"
+                          >
+                            Open Payments tab
+                          </button>
                         </div>
-                      );
-                    })()}
+                      </div>
+                    )}
+
                   </>
                 ) : activeTab === "BNPL Applications" ? (
                   <>
@@ -5181,10 +5097,10 @@ const BNPLBuyNow: React.FC = () => {
                         <h3 className="text-lg font-bold text-gray-900">Application Overview</h3>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span
-                            className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-full"
+                            className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-full capitalize"
                             style={getStatusColor(selectedItem.status)}
                           >
-                            {selectedItem.status || "N/A"}
+                            {formatBnplStatusLabel(selectedItem.status)}
                           </span>
                           {(() => {
                             const fin = bnplFinancingTypeLabel(selectedItem as Record<string, unknown>);
@@ -5303,6 +5219,64 @@ const BNPLBuyNow: React.FC = () => {
                       )}
                     </div>
 
+                    {/* Down payment / payment tracking — Troosolar path: order Payments tab; partner path: ends at deposit */}
+                    {(selectedItem.linked_bnpl_order_id || selectedItem.linked_bnpl_order?.id) && (() => {
+                      const isPartnerApp =
+                        bnplHadPartnerOffer(selectedItem as Record<string, unknown>) ||
+                        bnplIsPartnerApplication(selectedItem as Record<string, unknown>);
+                      const downPaid =
+                        selectedItem.down_payment_completed ||
+                        ["paid", "completed", "success"].includes(
+                          String(selectedItem.linked_bnpl_order?.payment_status || "").toLowerCase()
+                        );
+                      return (
+                      <div className={`rounded-lg border p-6 ${
+                        isPartnerApp
+                          ? "bg-gradient-to-r from-indigo-50 to-blue-50 border-indigo-200"
+                          : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
+                      }`}>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              {downPaid ? "Down payment received" : "BNPL order created"}
+                            </h3>
+                            {isPartnerApp ? (
+                              <p className="text-sm text-indigo-800 mt-1">
+                                Partner financing: Troosolar&apos;s payment flow ends after the down payment.
+                                Monthly debits are handled by the financing partner — there is no Troosolar
+                                installment schedule for this loan.
+                              </p>
+                            ) : (
+                              <p className="text-sm text-gray-600 mt-1">
+                                Customer payments and the monthly installment schedule are tracked on the BNPL Order
+                                (Payments tab) — not on the application form.
+                              </p>
+                            )}
+                            <p className="text-sm text-gray-700 mt-2">
+                              Order #{selectedItem.linked_bnpl_order_id || selectedItem.linked_bnpl_order?.id}
+                              {selectedItem.linked_bnpl_order?.payment_status
+                                ? ` · Payment: ${selectedItem.linked_bnpl_order.payment_status}`
+                                : ""}
+                            </p>
+                          </div>
+                          {!isPartnerApp && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const oid =
+                                  selectedItem.linked_bnpl_order_id || selectedItem.linked_bnpl_order?.id;
+                                if (oid) openOrderDetail(Number(oid));
+                              }}
+                              className="shrink-0 bg-[#273E8E] hover:bg-[#1e3270] text-white px-4 py-2 rounded-lg text-sm font-medium"
+                            >
+                              View order &amp; payments
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      );
+                    })()}
+
                     {detailUserId && siblingApplications.length > 1 && (
                       <div className="bg-white rounded-lg border border-gray-200 p-6">
                         <h3 className="text-lg font-semibold text-gray-900 mb-3">
@@ -5324,7 +5298,12 @@ const BNPLBuyNow: React.FC = () => {
                                 Application #{app.id}
                                 {app.id === selectedItem.id ? " (current)" : ""}
                               </span>
-                              <span className="capitalize text-gray-600">{app.status || "—"}</span>
+                              <span
+                                className="inline-flex items-center px-2.5 py-0.5 text-xs font-medium rounded-full capitalize"
+                                style={getStatusColor(app.status || "")}
+                              >
+                                {formatBnplStatusLabel(app.status || "—")}
+                              </span>
                               <span className="text-gray-500">{formatDate(app.created_at)}</span>
                             </button>
                           ))}
@@ -5366,25 +5345,10 @@ const BNPLBuyNow: React.FC = () => {
                         };
 
                         const statusLower = String(selectedItem?.status ?? selectedItem?.order_status ?? "").toLowerCase();
-                        const isCounterOfferAccepted = statusLower === "counter_offer_accepted";
-                        const acceptedMinDeposit = pickNum(
-                          selectedItem?.counter_offer_min_deposit,
-                          (selectedItem as Record<string, unknown>)?.counter_offer_details &&
-                            (selectedItem as Record<string, unknown>).counter_offer_details &&
-                            ((selectedItem as Record<string, unknown>).counter_offer_details as Record<string, unknown>)
-                              .down_payment
-                        );
-                        const acceptedMinTenor = pickNum(
-                          selectedItem?.counter_offer_min_tenor,
-                          (selectedItem as Record<string, unknown>)?.counter_offer_details &&
-                            (selectedItem as Record<string, unknown>).counter_offer_details &&
-                            ((selectedItem as Record<string, unknown>).counter_offer_details as Record<string, unknown>)
-                              .repayment_duration
-                        );
-                        const feePcts = bnplFeePctsForCounter(ld);
-                        const iPct = feePcts.insurance / 100;
-                        const mPct = feePcts.management / 100;
-                        const lPct = feePcts.legal / 100;
+                        const hadCounterOffer =
+                          !!(selectedItem as Record<string, unknown>)?.had_counter_offer ||
+                          (bnplParseAmountCounter(selectedItem?.counter_offer_min_deposit) > 0 &&
+                            bnplParseAmountCounter(selectedItem?.counter_offer_min_tenor) > 0);
                         const totalAmount = pickNum(ld.totalAmount, loanCalc?.total_amount);
                         const adminFeesTotal = pickNum(
                           ld.adminFeesTotal,
@@ -5392,9 +5356,8 @@ const BNPLBuyNow: React.FC = () => {
                             pickNum(ld.managementFee, 0) +
                             pickNum(ld.legalFee, 0)
                         );
-                        const initialDepositWithFees = isCounterOfferAccepted && acceptedMinDeposit > 0
-                          ? acceptedMinDeposit
-                          : pickNum(ld.depositAmount, loanCalc?.down_payment);
+                        // Always show customer's original choice here; counter offer is a separate card.
+                        const initialDepositWithFees = pickNum(ld.depositAmount, loanCalc?.down_payment);
                         const baseDepositFromSnap = pickNum(ld.baseDepositAmount);
                         const bundlePriceApprox =
                           pickNum(ld.principal, ld.totalLoanAmount) > 0 && baseDepositFromSnap >= 0
@@ -5445,8 +5408,7 @@ const BNPLBuyNow: React.FC = () => {
                           DEFAULT_BNPL_INTEREST_RATE_PERCENT;
                         const tenor =
                           Number(
-                            (isCounterOfferAccepted && acceptedMinTenor > 0 ? acceptedMinTenor : null) ??
-                              ld.tenor ??
+                            ld.tenor ??
                               loanApp?.repayment_duration ??
                               loanCalc?.repayment_duration ??
                               loanCalc?.tenor ??
@@ -5457,35 +5419,20 @@ const BNPLBuyNow: React.FC = () => {
                           ld.totalInterest,
                           loanCalc?.total_interest_amount
                         );
-                        let totalInterestAmount =
+                        const totalInterestAmount =
                           totalInterestFromApi > 0
                             ? totalInterestFromApi
                             : (interestRatePercent / 100) * totalLoanAmount * tenor;
-                        let totalRepaymentAmount =
+                        const totalRepaymentAmount =
                           pickNum(ld.totalRepaymentAmount, ld.totalRepayment, loanCalc?.total_repayment) ||
                           totalLoanAmount + totalInterestAmount;
-                        let monthlyRepaymentAmount =
+                        const monthlyRepaymentAmount =
                           pickNum(
                             ld.monthlyRepaymentAmount,
                             ld.monthlyRepayment,
                             loanCalc?.monthly_repayment,
                             loanCalc?.monthly_payment
                           ) || (tenor > 0 ? totalRepaymentAmount / tenor : 0);
-
-                        if (isCounterOfferAccepted && acceptedMinDeposit > 0 && bundlePriceApprox > 0) {
-                          const denom = 1 - mPct - lPct;
-                          const baseDeposit =
-                            denom > 0.0001
-                              ? Math.max((acceptedMinDeposit - bundlePriceApprox * (iPct + mPct + lPct)) / denom, 0)
-                              : 0;
-                          const baseLoanAmount = Math.max(bundlePriceApprox - baseDeposit, 0);
-                          totalLoanAmount = baseLoanAmount;
-                          totalInterestAmount = (interestRatePercent / 100) * baseLoanAmount * tenor;
-                          totalRepaymentAmount = baseLoanAmount + totalInterestAmount;
-                          monthlyRepaymentAmount = tenor > 0 ? totalRepaymentAmount / tenor : 0;
-                          depositPercentForLabel =
-                            bundlePriceApprox > 0 ? Math.round((baseDeposit / bundlePriceApprox) * 100) : depositPercentForLabel;
-                        }
                         const depositLabelPct =
                           depositPercentForLabel > 0 ? `${depositPercentForLabel}%` : "—";
 
@@ -5593,27 +5540,28 @@ const BNPLBuyNow: React.FC = () => {
                         const isPartnerOfferView =
                           String(selectedItem.status || "").toLowerCase() === "partner_offer" ||
                           hasPartnerOfferFields;
+                        const showAsOriginalChoice = isPartnerOfferView || hadCounterOffer;
                         return (
                           <div
                             className={`rounded-xl shadow-sm border p-6 ${
-                              isPartnerOfferView
+                              showAsOriginalChoice
                                 ? "bg-gradient-to-r from-slate-50 to-gray-50 border-gray-200"
                                 : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
                             }`}
                           >
-                            <div className={`flex items-center gap-3 ${isPartnerOfferView ? "mb-2" : "mb-4"}`}>
+                            <div className={`flex items-center gap-3 ${showAsOriginalChoice ? "mb-2" : "mb-4"}`}>
                               <span className="text-[#273E8E] text-2xl font-bold" aria-hidden="true">
                                 ₦
                               </span>
                               <h3 className="text-xl font-semibold text-gray-800">
-                                {isPartnerOfferView
+                                {showAsOriginalChoice
                                   ? "Customer's Original Choice"
                                   : isPartnerFinancing
                                     ? "Partner Financing Summary"
                                     : "Loan Summary"}
                               </h3>
                             </div>
-                            {isPartnerOfferView && (
+                            {showAsOriginalChoice && (
                               <p className="text-sm text-gray-600 mb-4">
                                 What the customer selected when they applied
                                 {isPartnerFinancing ? " (Financing Summary)." : " (Loan Summary)."}
@@ -5624,7 +5572,7 @@ const BNPLBuyNow: React.FC = () => {
                                 <div
                                   key={row.num}
                                   className={`bg-white rounded-lg p-4 border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 ${
-                                    isPartnerOfferView ? "border-gray-100" : "border-green-100"
+                                    showAsOriginalChoice ? "border-gray-100" : "border-green-100"
                                   }`}
                                 >
                                   <p
@@ -5650,10 +5598,10 @@ const BNPLBuyNow: React.FC = () => {
                                   </p>
                                 </div>
                               ))}
-                              <div className={`border-t pt-3 mt-1 ${isPartnerOfferView ? "border-gray-200" : "border-green-200"}`}>
+                              <div className={`border-t pt-3 mt-1 ${showAsOriginalChoice ? "border-gray-200" : "border-green-200"}`}>
                                 <div
                                   className={`bg-white rounded-lg p-4 border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 ${
-                                    isPartnerOfferView ? "border-gray-100" : "border-green-100"
+                                    showAsOriginalChoice ? "border-gray-100" : "border-green-100"
                                   }`}
                                 >
                                   <p className="text-sm font-medium text-gray-800">
@@ -5668,6 +5616,243 @@ const BNPLBuyNow: React.FC = () => {
                           </div>
                         );
                       })()}
+
+                    {/* Counter Offer breakdown — keep after accept / approval / down payment */}
+                    {(() => {
+                      const la = (selectedItem.loan_application || selectedItem) as Record<string, unknown>;
+                      const d = (selectedItem.counter_offer_details ||
+                        la.counter_offer_details ||
+                        {}) as Record<string, unknown>;
+                      const upfront = bnplParseAmountCounter(
+                        d.upfront_deposit_total ?? d.down_payment ?? selectedItem.counter_offer_min_deposit
+                      );
+                      const tenor =
+                        bnplParseAmountCounter(d.repayment_duration ?? selectedItem.counter_offer_min_tenor) || 0;
+                      const hasDetailsPayload =
+                        bnplParseAmountCounter(d.upfront_deposit_total ?? d.down_payment) > 0 ||
+                        bnplParseAmountCounter(d.total_loan_amount ?? d.loan_amount) > 0;
+                      const storedUpfront = bnplParseAmountCounter(selectedItem.counter_offer_min_deposit);
+                      const storedTenor = bnplParseAmountCounter(selectedItem.counter_offer_min_tenor);
+                      const hasCounterOffer =
+                        !!(selectedItem as Record<string, unknown>).had_counter_offer ||
+                        (storedUpfront > 0 && storedTenor > 0) ||
+                        String(selectedItem.status || "").toLowerCase() === "counter_offer" ||
+                        String(selectedItem.status || "").toLowerCase() === "counter_offer_accepted";
+                      if (!hasCounterOffer) return null;
+                      if (!hasDetailsPayload) {
+                        // Fall back: compute from stored ₦ + snapshot when API details missing
+                        const snap =
+                          selectedItem?.loan_plan_snapshot && typeof selectedItem.loan_plan_snapshot === "object"
+                            ? (selectedItem.loan_plan_snapshot as Record<string, unknown>)
+                            : null;
+                        if (!(storedUpfront > 0 && storedTenor > 0)) return null;
+                        const feePcts = bnplFeePctsForCounter(snap ?? undefined);
+                        const interestM = bnplInterestMonthlyForCounter(
+                          snap ?? undefined,
+                          Number((selectedItem as any)?.mono?.interest_rate) || 4
+                        );
+                        const loanCalcTotal = bnplLoanCalculatorTotalFromSnapshotForCounter(snap ?? undefined);
+                        const catalog = bnplCatalogBundlePriceFromSnapshotForCounter(snap ?? undefined);
+                        const pct = bnplDepositPercentFromUpfrontTotal(
+                          loanCalcTotal,
+                          storedUpfront,
+                          feePcts,
+                          catalog
+                        );
+                        const plan =
+                          loanCalcTotal > 0 && pct > 0
+                            ? bnplComputeCounterOfferPlan(
+                                loanCalcTotal,
+                                Math.round(pct),
+                                storedTenor,
+                                interestM,
+                                feePcts,
+                                catalog
+                              )
+                            : null;
+                        if (!plan) return null;
+                        const depositLabel = `Initial Deposit (${plan.depositPercent}%) + Total Administrative Fees`;
+                        const interestLabel = `Total Interest Amount (${interestM}% × ${storedTenor} mo)`;
+                        const statusLower = String(selectedItem.status || "").toLowerCase();
+                        return (
+                          <div className="bg-yellow-50 border-2 border-yellow-300 rounded-xl p-6">
+                            <div className="flex items-center gap-3 mb-2">
+                              <span className="text-yellow-700 text-xl font-bold" aria-hidden="true">
+                                ₦
+                              </span>
+                              <h3 className="text-xl font-semibold text-yellow-900">Counter Offer</h3>
+                            </div>
+                            <p className="text-sm text-yellow-900 mb-4">
+                              Counter offer terms sent to the customer
+                              {statusLower === "counter_offer"
+                                ? " (pending customer response)."
+                                : statusLower === "counter_offer_accepted" || statusLower === "approved"
+                                  ? " (accepted)."
+                                  : "."}
+                            </p>
+                            <div className="space-y-3">
+                              {[
+                                { label: depositLabel, value: plan.upfrontDepositTotal },
+                                { label: "Total Loan Amount", value: plan.totalLoanAmount },
+                                { label: interestLabel, value: plan.totalInterestAmount },
+                                { label: "Total Repayment Amount", value: plan.totalRepaymentAmount },
+                                { label: "Monthly Repayment Amount", value: plan.monthlyRepaymentAmount },
+                              ].map((row, index) => (
+                                <div
+                                  key={row.label}
+                                  className="bg-white rounded-lg p-4 border border-yellow-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1"
+                                >
+                                  <p className="text-sm font-medium text-gray-800">{row.label}</p>
+                                  <p
+                                    className={`text-xl font-bold tabular-nums ${
+                                      index === 4 ? "text-[#273E8E]" : "text-gray-800"
+                                    }`}
+                                  >
+                                    {bnplFormatNaira(row.value)}
+                                  </p>
+                                </div>
+                              ))}
+                              <div className="border-t border-yellow-200 pt-3 mt-1">
+                                <div className="bg-white rounded-lg p-4 border border-yellow-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                                  <p className="text-sm font-medium text-gray-800">Loan Tenor</p>
+                                  <p className="text-xl font-bold text-[#273E8E]">
+                                    {storedTenor} {storedTenor === 1 ? "month" : "months"}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="mt-3 pt-3 border-t border-yellow-200 text-xs text-gray-700 space-y-1">
+                                <p className="font-semibold text-gray-800">Administrative Fees</p>
+                                <div className="flex justify-between gap-2">
+                                  <span>Insurance ({feePcts.insurance}% of bundle price)</span>
+                                  <span className="tabular-nums">{bnplFormatNaira(plan.insuranceFee)}</span>
+                                </div>
+                                <div className="flex justify-between gap-2">
+                                  <span>Management ({feePcts.management}% of loan amount)</span>
+                                  <span className="tabular-nums">{bnplFormatNaira(plan.managementFee)}</span>
+                                </div>
+                                <div className="flex justify-between gap-2">
+                                  <span>Legal ({feePcts.legal}% of loan amount)</span>
+                                  <span className="tabular-nums">{bnplFormatNaira(plan.legalFee)}</span>
+                                </div>
+                                <div className="flex justify-between gap-2 font-medium border-t border-yellow-200 pt-1 mt-1">
+                                  <span>Total administrative fees</span>
+                                  <span className="tabular-nums">{bnplFormatNaira(plan.adminFeesTotal)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      const depositPct = bnplParseAmountCounter(d.deposit_percent);
+                      const totalLoan = bnplParseAmountCounter(d.total_loan_amount ?? d.loan_amount);
+                      const interestRate = bnplParseAmountCounter(d.interest_rate);
+                      const totalInterest = bnplParseAmountCounter(d.total_interest_amount);
+                      const totalRepayment = bnplParseAmountCounter(
+                        d.total_repayment_amount ?? d.total_amount
+                      );
+                      const monthly = bnplParseAmountCounter(
+                        d.monthly_repayment_amount ?? d.monthly_payment
+                      );
+                      const insuranceFee = bnplParseAmountCounter(d.insurance_fee);
+                      const managementFee = bnplParseAmountCounter(d.management_fee);
+                      const legalFee = bnplParseAmountCounter(d.legal_fee);
+                      const adminFees = bnplParseAmountCounter(d.admin_fees_total);
+                      const insurancePct = bnplParseAmountCounter(d.insurance_pct) || 1;
+                      const managementPct = bnplParseAmountCounter(d.management_pct) || 1;
+                      const legalPct = bnplParseAmountCounter(d.legal_pct) || 1;
+                      const depositLabel = depositPct
+                        ? `Initial Deposit (${depositPct}%) + Total Administrative Fees`
+                        : "Initial Deposit + Total Administrative Fees";
+                      const interestLabel =
+                        interestRate > 0 && tenor > 0
+                          ? `Total Interest Amount (${interestRate}% × ${tenor} mo)`
+                          : "Total Interest Amount";
+                      const statusLower = String(selectedItem.status || "").toLowerCase();
+                      const notes =
+                        selectedItem.admin_notes ||
+                        (typeof la.admin_notes === "string" ? la.admin_notes : null);
+
+                      return (
+                        <div className="bg-yellow-50 border-2 border-yellow-300 rounded-xl p-6">
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="text-yellow-700 text-xl font-bold" aria-hidden="true">
+                              ₦
+                            </span>
+                            <h3 className="text-xl font-semibold text-yellow-900">Counter Offer</h3>
+                          </div>
+                          <p className="text-sm text-yellow-900 mb-4">
+                            Counter offer terms sent to the customer
+                            {statusLower === "counter_offer"
+                              ? " (pending customer response)."
+                              : statusLower === "counter_offer_accepted" || statusLower === "approved"
+                                ? " (accepted)."
+                                : "."}
+                          </p>
+                          {notes && (
+                            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                              <p className="text-sm text-gray-700">
+                                <strong>Admin Note:</strong> {notes}
+                              </p>
+                            </div>
+                          )}
+                          <div className="space-y-3">
+                            {[
+                              { label: depositLabel, value: upfront },
+                              { label: "Total Loan Amount", value: totalLoan },
+                              { label: interestLabel, value: totalInterest },
+                              { label: "Total Repayment Amount", value: totalRepayment },
+                              { label: "Monthly Repayment Amount", value: monthly },
+                            ].map((row, index) => (
+                              <div
+                                key={row.label}
+                                className="bg-white rounded-lg p-4 border border-yellow-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1"
+                              >
+                                <p className="text-sm font-medium text-gray-800">{row.label}</p>
+                                <p
+                                  className={`text-xl font-bold tabular-nums ${
+                                    index === 4 ? "text-[#273E8E]" : "text-gray-800"
+                                  }`}
+                                >
+                                  {bnplFormatNaira(row.value)}
+                                </p>
+                              </div>
+                            ))}
+                            {tenor > 0 && (
+                              <div className="border-t border-yellow-200 pt-3 mt-1">
+                                <div className="bg-white rounded-lg p-4 border border-yellow-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                                  <p className="text-sm font-medium text-gray-800">Loan Tenor</p>
+                                  <p className="text-xl font-bold text-[#273E8E]">
+                                    {tenor} {tenor === 1 ? "month" : "months"}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                            {(insuranceFee > 0 || managementFee > 0 || legalFee > 0) && (
+                              <div className="mt-3 pt-3 border-t border-yellow-200 text-xs text-gray-700 space-y-1">
+                                <p className="font-semibold text-gray-800">Administrative Fees</p>
+                                <div className="flex justify-between gap-2">
+                                  <span>Insurance ({insurancePct}% of bundle price)</span>
+                                  <span className="tabular-nums">{bnplFormatNaira(insuranceFee)}</span>
+                                </div>
+                                <div className="flex justify-between gap-2">
+                                  <span>Management ({managementPct}% of loan amount)</span>
+                                  <span className="tabular-nums">{bnplFormatNaira(managementFee)}</span>
+                                </div>
+                                <div className="flex justify-between gap-2">
+                                  <span>Legal ({legalPct}% of loan amount)</span>
+                                  <span className="tabular-nums">{bnplFormatNaira(legalFee)}</span>
+                                </div>
+                                <div className="flex justify-between gap-2 font-medium border-t border-yellow-200 pt-1 mt-1">
+                                  <span>Total administrative fees</span>
+                                  <span className="tabular-nums">{bnplFormatNaira(adminFees)}</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Same Partner Financing Offer breakdown the customer sees (keep after approval) */}
                     {(() => {
@@ -6444,64 +6629,179 @@ const BNPLBuyNow: React.FC = () => {
                         </svg>
                         Installation Date
                       </h3>
-                      <p className="text-sm text-gray-500 mb-4">Customer can book an installation date after down payment. Accept or reject the requested date here. If rejected, they will be notified and can book another date.</p>
-                      {selectedItem?.installation_requested_date ? (
+                      <p className="text-sm text-gray-500 mb-4">Customer can book an installation date after down payment. Accept or reject the requested date here. If rejected, choose an alternate date and optional note — the customer will be notified.</p>
+                      {selectedItem?.installation_requested_date || selectedItem?.installation_booking_status === "rejected" || selectedItem?.installation_booking_status === "accepted" ? (
                         <div className="space-y-3">
-                          <p className="text-sm text-gray-700">
-                            <span className="font-medium">Requested date:</span> {selectedItem.installation_requested_date}
-                          </p>
+                          {selectedItem?.installation_requested_date && (
+                            <p className="text-sm text-gray-700">
+                              <span className="font-medium">Requested date:</span> {selectedItem.installation_requested_date}
+                            </p>
+                          )}
                           <p className="text-sm text-gray-700">
                             <span className="font-medium">Status:</span>{" "}
                             <span className={selectedItem.installation_booking_status === "accepted" ? "text-green-600" : selectedItem.installation_booking_status === "rejected" ? "text-red-600" : "text-amber-600"}>
                               {selectedItem.installation_booking_status || "pending"}
                             </span>
                           </p>
-                          {selectedItem.installation_booking_status === "pending" && (
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                disabled={savingInstallationAccept || savingInstallationReject}
-                                onClick={async () => {
-                                  if (!selectedItem?.id || !token) return;
-                                  setSavingInstallationAccept(true);
-                                  try {
-                                    await acceptBNPLInstallationDate(selectedItem.id, token);
-                                    queryClient.invalidateQueries({ queryKey: ["bnpl-applications"] });
-                                    const fresh = await getBNPLApplication(selectedItem.id, token);
-                                    setSelectedItem(fresh.data);
-                                    alert("Installation date accepted.");
-                                  } catch (err: any) {
-                                    alert(err?.response?.data?.message || err?.message || "Failed to accept");
-                                  } finally {
-                                    setSavingInstallationAccept(false);
-                                  }
-                                }}
-                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-                              >
-                                {savingInstallationAccept ? "Accepting..." : "Accept"}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={savingInstallationAccept || savingInstallationReject}
-                                onClick={async () => {
-                                  if (!selectedItem?.id || !token) return;
-                                  setSavingInstallationReject(true);
-                                  try {
-                                    await rejectBNPLInstallationDate(selectedItem.id, token);
-                                    queryClient.invalidateQueries({ queryKey: ["bnpl-applications"] });
-                                    const fresh = await getBNPLApplication(selectedItem.id, token);
-                                    setSelectedItem(fresh.data);
-                                    alert("Installation date rejected. Customer has been notified to book another date.");
-                                  } catch (err: any) {
-                                    alert(err?.response?.data?.message || err?.message || "Failed to reject");
-                                  } finally {
-                                    setSavingInstallationReject(false);
-                                  }
-                                }}
-                                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-                              >
-                                {savingInstallationReject ? "Rejecting..." : "Reject"}
-                              </button>
+                          {selectedItem.installation_admin_proposed_date && (
+                            <p className="text-sm text-gray-700">
+                              <span className="font-medium">Suggested date sent:</span> {selectedItem.installation_admin_proposed_date}
+                            </p>
+                          )}
+                          {selectedItem.installation_rejection_note && (
+                            <p className="text-sm text-gray-700">
+                              <span className="font-medium">Note sent:</span> {selectedItem.installation_rejection_note}
+                            </p>
+                          )}
+                          {selectedItem.installation_booking_status === "pending" && selectedItem.installation_requested_date && (
+                            <div className="space-y-3">
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  disabled={savingInstallationAccept || savingInstallationReject || showInstallationRejectForm}
+                                  onClick={async () => {
+                                    if (!selectedItem?.id || !token) return;
+                                    setSavingInstallationAccept(true);
+                                    try {
+                                      await acceptBNPLInstallationDate(selectedItem.id, token);
+                                      queryClient.invalidateQueries({ queryKey: ["bnpl-applications"] });
+                                      const fresh = await getBNPLApplication(selectedItem.id, token);
+                                      setSelectedItem(fresh.data);
+                                      setShowInstallationRejectForm(false);
+                                      alert("Installation date accepted.");
+                                    } catch (err: any) {
+                                      const msg =
+                                        err?.response?.data?.message ||
+                                        err?.message ||
+                                        "Failed to accept installation date.";
+                                      alert(msg);
+                                    } finally {
+                                      setSavingInstallationAccept(false);
+                                    }
+                                  }}
+                                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                                >
+                                  {savingInstallationAccept ? "Accepting..." : "Accept"}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={savingInstallationAccept || savingInstallationReject}
+                                  onClick={() => {
+                                    setShowInstallationRejectForm(true);
+                                    const min = new Date();
+                                    min.setDate(min.getDate() + 1);
+                                    setInstallationRejectProposedDate(min.toISOString().slice(0, 10));
+                                    setInstallationRejectNote("");
+                                  }}
+                                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                              {showInstallationRejectForm && (
+                                <div className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-3">
+                                  <p className="text-sm font-medium text-red-900">
+                                    Reject this date and send an alternate date to the customer
+                                  </p>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Suggested installation date
+                                    </label>
+                                    <input
+                                      type="date"
+                                      min={(() => {
+                                        const d = new Date();
+                                        d.setDate(d.getDate() + 1);
+                                        return d.toISOString().slice(0, 10);
+                                      })()}
+                                      value={installationRejectProposedDate}
+                                      onChange={(e) => setInstallationRejectProposedDate(e.target.value)}
+                                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+                                    />
+                                    <p className="mt-1 text-xs text-gray-500">Sundays are not available.</p>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Note to customer (optional)
+                                    </label>
+                                    <textarea
+                                      rows={3}
+                                      value={installationRejectNote}
+                                      onChange={(e) => setInstallationRejectNote(e.target.value)}
+                                      placeholder="Explain why the date was rejected or any scheduling instructions…"
+                                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+                                    />
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={savingInstallationReject}
+                                      onClick={() => {
+                                        setShowInstallationRejectForm(false);
+                                        setInstallationRejectProposedDate("");
+                                        setInstallationRejectNote("");
+                                      }}
+                                      className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={
+                                        savingInstallationReject ||
+                                        !installationRejectProposedDate
+                                      }
+                                      onClick={async () => {
+                                        if (!selectedItem?.id || !token || !installationRejectProposedDate) return;
+                                        const day = new Date(`${installationRejectProposedDate}T12:00:00`).getDay();
+                                        if (day === 0) {
+                                          alert("Sundays are not available. Please choose another day.");
+                                          return;
+                                        }
+                                        if (
+                                          installationRejectProposedDate ===
+                                          String(selectedItem.installation_requested_date || "").slice(0, 10)
+                                        ) {
+                                          alert("Suggested date must be different from the customer's requested date.");
+                                          return;
+                                        }
+                                        setSavingInstallationReject(true);
+                                        try {
+                                          await rejectBNPLInstallationDate(selectedItem.id, token, {
+                                            proposed_date: installationRejectProposedDate,
+                                            note: installationRejectNote.trim() || undefined,
+                                          });
+                                          queryClient.invalidateQueries({ queryKey: ["bnpl-applications"] });
+                                          const fresh = await getBNPLApplication(selectedItem.id, token);
+                                          setSelectedItem(fresh.data);
+                                          setShowInstallationRejectForm(false);
+                                          setInstallationRejectProposedDate("");
+                                          setInstallationRejectNote("");
+                                          alert(
+                                            "Installation date rejected. Customer has been notified with your suggested date."
+                                          );
+                                        } catch (err: any) {
+                                          const msg =
+                                            err?.response?.data?.message ||
+                                            (err?.response?.data?.errors
+                                              ? Object.values(err.response.data.errors).flat().join(" ")
+                                              : null) ||
+                                            err?.message ||
+                                            "Failed to reject installation date.";
+                                          alert(msg);
+                                        } finally {
+                                          setSavingInstallationReject(false);
+                                        }
+                                      }}
+                                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                                    >
+                                      {savingInstallationReject
+                                        ? "Sending..."
+                                        : "Send suggested date"}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
                           {Array.isArray(selectedItem.installation_rejected_dates) && selectedItem.installation_rejected_dates.length > 0 && (
@@ -7230,6 +7530,252 @@ const BNPLBuyNow: React.FC = () => {
                 )}
               </div>
             )}
+
+            {detailModalTab === "Payments" && activeTab === "BNPL Orders" && selectedItem && (() => {
+                      const rs = selectedItem.repayment_summary;
+                      const schedule: any[] = Array.isArray(selectedItem.repayment_schedule)
+                        ? selectedItem.repayment_schedule
+                        : [];
+                      const history: any[] = Array.isArray(selectedItem.repayment_history)
+                        ? selectedItem.repayment_history
+                        : [];
+                      const paidInstallments = schedule.filter(
+                        (i) => i.status === "paid" || i.computed_status === "paid"
+                      );
+                      const customerName =
+                        rs?.order_customer_name ||
+                        `${selectedItem.user?.first_name || ""} ${selectedItem.user?.sur_name || ""}`.trim() ||
+                        "—";
+                      const customerEmail =
+                        rs?.order_customer_email || selectedItem.user?.email || null;
+                      const customerId = rs?.order_customer_id ?? selectedItem.user?.id;
+
+                      return (
+                        <div className="space-y-6">
+                          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-6">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                              <svg className="w-5 h-5 text-[#273E8E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                              </svg>
+                              Customer repayment summary
+                            </h3>
+                            <p className="text-sm text-gray-600 mb-4">
+                              Payments on this BNPL order are attributed to the customer below. When a linked transaction exists, the payer shown is taken from that payment record.
+                            </p>
+                            <div className="bg-white/80 rounded-lg border border-blue-100 p-4 mb-4">
+                              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Order customer</p>
+                              <p className="text-base font-semibold text-gray-900">{customerName}</p>
+                              <div className="mt-1 text-sm text-gray-600 flex flex-wrap gap-x-3 gap-y-1">
+                                {customerId != null && <span>User ID: #{customerId}</span>}
+                                {customerEmail && <span>{customerEmail}</span>}
+                              </div>
+                            </div>
+                            {getBnplOrderDisplayStatus(selectedItem) === "payment_complete" && (
+                              <div className="mb-4 inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold text-white"
+                                style={getStatusColor("payment_complete")}
+                              >
+                                Payment Complete
+                              </div>
+                            )}
+                            {rs ? (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div className="bg-white rounded-lg p-4 border border-blue-100">
+                                  <p className="text-xs text-gray-500 mb-1">Total repayment</p>
+                                  <p className="text-xl font-bold text-gray-900">{formatCurrency(rs.total_amount ?? 0)}</p>
+                                </div>
+                                <div className="bg-white rounded-lg p-4 border border-blue-100">
+                                  <p className="text-xs text-gray-500 mb-1">Paid</p>
+                                  <p className="text-xl font-bold text-green-700">{formatCurrency(rs.paid_amount ?? 0)}</p>
+                                </div>
+                                <div className="bg-white rounded-lg p-4 border border-blue-100">
+                                  <p className="text-xs text-gray-500 mb-1">Pending</p>
+                                  <p className="text-xl font-bold text-amber-700">{formatCurrency(rs.pending_amount ?? 0)}</p>
+                                </div>
+                                <div className="bg-white rounded-lg p-4 border border-blue-100">
+                                  <p className="text-xs text-gray-500 mb-1">Overdue (installments)</p>
+                                  <p className="text-xl font-bold text-red-700">{formatCurrency(rs.overdue_amount ?? 0)}</p>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-gray-600">No repayment summary available for this order.</p>
+                            )}
+                            {rs && (
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-center text-sm">
+                                <div className="bg-white/90 rounded-lg py-2 px-2 border border-blue-50">
+                                  <span className="text-gray-500 block text-xs">Installments</span>
+                                  <span className="font-bold text-gray-900">{rs.total_installments ?? 0}</span>
+                                </div>
+                                <div className="bg-white/90 rounded-lg py-2 px-2 border border-blue-50">
+                                  <span className="text-gray-500 block text-xs">Paid</span>
+                                  <span className="font-bold text-green-700">{rs.paid_installments ?? 0}</span>
+                                </div>
+                                <div className="bg-white/90 rounded-lg py-2 px-2 border border-blue-50">
+                                  <span className="text-gray-500 block text-xs">Pending</span>
+                                  <span className="font-bold text-amber-700">{rs.pending_installments ?? 0}</span>
+                                </div>
+                                <div className="bg-white/90 rounded-lg py-2 px-2 border border-blue-50">
+                                  <span className="text-gray-500 block text-xs">Overdue</span>
+                                  <span className="font-bold text-red-700">{rs.overdue_installments ?? 0}</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="bg-white rounded-lg border border-gray-200 p-6">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-2">Payments recorded</h3>
+                            <p className="text-sm text-gray-600 mb-4">
+                              Installments marked paid and repayment log entries. Payer name uses the linked transaction user when available; otherwise the order customer is shown.
+                            </p>
+                            {paidInstallments.length === 0 && history.length === 0 ? (
+                              <p className="text-sm text-gray-500 italic">No payments recorded yet.</p>
+                            ) : (
+                              <div className="space-y-4">
+                                {paidInstallments.length > 0 && (
+                                  <div>
+                                    <h4 className="text-sm font-semibold text-gray-800 mb-2">Paid installments</h4>
+                                    <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                                      <table className="min-w-full text-sm">
+                                        <thead className="bg-gray-50 text-left text-gray-600">
+                                          <tr>
+                                            <th className="px-3 py-2 font-medium">#</th>
+                                            <th className="px-3 py-2 font-medium">Amount</th>
+                                            <th className="px-3 py-2 font-medium">Paid at</th>
+                                            <th className="px-3 py-2 font-medium">Recorded payer</th>
+                                            <th className="px-3 py-2 font-medium">Method / ref</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                          {paidInstallments.map((inst: any) => (
+                                            <tr key={inst.id ?? `${inst.installment_number}-${inst.paid_at}`}>
+                                              <td className="px-3 py-2">{inst.installment_number ?? "—"}</td>
+                                              <td className="px-3 py-2 font-medium">{formatCurrency(inst.amount)}</td>
+                                              <td className="px-3 py-2 text-gray-700">
+                                                {inst.paid_at ? formatDate(inst.paid_at) : "—"}
+                                              </td>
+                                              <td className="px-3 py-2">
+                                                <span className="font-medium text-gray-900">
+                                                  {inst.paid_by_display ||
+                                                    inst.transaction?.payer_name ||
+                                                    customerName}
+                                                </span>
+                                                {inst.transaction?.payer_email && (
+                                                  <span className="block text-xs text-gray-500">{inst.transaction.payer_email}</span>
+                                                )}
+                                              </td>
+                                              <td className="px-3 py-2 text-gray-700">
+                                                {inst.transaction?.method || "—"}
+                                                {inst.transaction?.tx_id && (
+                                                  <span className="block text-xs text-gray-500 truncate max-w-[140px]" title={inst.transaction.tx_id}>
+                                                    {inst.transaction.tx_id}
+                                                  </span>
+                                                )}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                )}
+                                {history.length > 0 && (
+                                  <div>
+                                    <h4 className="text-sm font-semibold text-gray-800 mb-2">Repayment log</h4>
+                                    <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                                      <table className="min-w-full text-sm">
+                                        <thead className="bg-gray-50 text-left text-gray-600">
+                                          <tr>
+                                            <th className="px-3 py-2 font-medium">Amount</th>
+                                            <th className="px-3 py-2 font-medium">Status</th>
+                                            <th className="px-3 py-2 font-medium">When</th>
+                                            <th className="px-3 py-2 font-medium">Recorded payer</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                          {history.map((h: any) => (
+                                            <tr key={h.id}>
+                                              <td className="px-3 py-2 font-medium">{formatCurrency(h.amount)}</td>
+                                              <td className="px-3 py-2 capitalize">{h.status || "—"}</td>
+                                              <td className="px-3 py-2 text-gray-700">{h.created_at ? formatDate(h.created_at) : "—"}</td>
+                                              <td className="px-3 py-2">
+                                                <span className="font-medium text-gray-900">{h.payer_name || customerName}</span>
+                                                {h.payer_email && (
+                                                  <span className="block text-xs text-gray-500">{h.payer_email}</span>
+                                                )}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="bg-white rounded-lg border border-gray-200 p-6">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-2">Repayment schedule</h3>
+                            <p className="text-sm text-gray-600 mb-4">
+                              Full installment plan for this order (same data customers see on the dashboard).
+                            </p>
+                            {schedule.length === 0 ? (
+                              <p className="text-sm text-gray-500 italic">
+                                No installments found. The schedule may appear after the loan is activated and installments are generated.
+                              </p>
+                            ) : (
+                              <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                                <table className="min-w-full text-sm">
+                                  <thead className="bg-gray-50 text-left text-gray-600">
+                                    <tr>
+                                      <th className="px-3 py-2 font-medium">#</th>
+                                      <th className="px-3 py-2 font-medium">Due date</th>
+                                      <th className="px-3 py-2 font-medium">Amount</th>
+                                      <th className="px-3 py-2 font-medium">Status</th>
+                                      <th className="px-3 py-2 font-medium">Paid at</th>
+                                      <th className="px-3 py-2 font-medium">Payer (if paid)</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100">
+                                    {schedule.map((inst: any) => {
+                                      const st = inst.computed_status || inst.status;
+                                      const isPaid = inst.status === "paid" || st === "paid";
+                                      return (
+                                        <tr key={inst.id ?? `${inst.installment_number}-${inst.payment_date}`}>
+                                          <td className="px-3 py-2">{inst.installment_number ?? "—"}</td>
+                                          <td className="px-3 py-2">{inst.payment_date ? formatDate(inst.payment_date) : "—"}</td>
+                                          <td className="px-3 py-2 font-medium">{formatCurrency(inst.amount)}</td>
+                                          <td className="px-3 py-2">
+                                            <span
+                                              className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                                                isPaid
+                                                  ? "bg-green-100 text-green-800"
+                                                  : inst.is_overdue || st === "overdue"
+                                                    ? "bg-red-100 text-red-800"
+                                                    : "bg-amber-100 text-amber-800"
+                                              }`}
+                                            >
+                                              {String(st || "pending").replace(/_/g, " ")}
+                                            </span>
+                                          </td>
+                                          <td className="px-3 py-2 text-gray-700">
+                                            {inst.paid_at ? formatDate(inst.paid_at) : "—"}
+                                          </td>
+                                          <td className="px-3 py-2 text-gray-800">
+                                            {isPaid
+                                              ? inst.paid_by_display || inst.transaction?.payer_name || customerName
+                                              : "—"}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+            })()}
 
             {detailModalTab === "Summary" && (
               <div className="space-y-4">
@@ -8074,7 +8620,8 @@ const BNPLBuyNow: React.FC = () => {
                       selectedItem?.loan_plan_snapshot && typeof selectedItem.loan_plan_snapshot === "object"
                         ? (selectedItem.loan_plan_snapshot as Record<string, unknown>)
                         : null;
-                    const bundle = bnplBundlePriceFromSnapshotForCounter(snap ?? undefined);
+                    const bundle = bnplLoanCalculatorTotalFromSnapshotForCounter(snap ?? undefined);
+                    const catalogBundle = bnplCatalogBundlePriceFromSnapshotForCounter(snap ?? undefined);
                     const pct = Number(statusForm.counter_offer_min_deposit);
                     const tenor = Number(statusForm.counter_offer_min_tenor);
                     const feePcts = bnplFeePctsForCounter(snap ?? undefined);
@@ -8094,7 +8641,7 @@ const BNPLBuyNow: React.FC = () => {
                     const plan = shouldUseSnapshotPlan
                       ? snapPlan
                       : bundle > 0 && pct > 0 && pct <= 100 && tenor > 0
-                        ? bnplComputeCounterOfferPlan(bundle, pct, tenor, interestM, feePcts)
+                        ? bnplComputeCounterOfferPlan(bundle, pct, tenor, interestM, feePcts, catalogBundle)
                         : null;
                     if (!plan) {
                       return (
@@ -8110,9 +8657,17 @@ const BNPLBuyNow: React.FC = () => {
                         <p className="font-semibold text-gray-800">Preview (matches BNPL “Review Your Loan Plan”)</p>
                         <p className="text-xs text-gray-600">
                           Loan calculator total (principal + equity):{" "}
-                          <strong>{formatCurrency(plan.bundlePrice)}</strong> · Interest: {interestM}% × {tenor} mo ·
-                          Insurance {feePcts.insurance}% of this total; management {feePcts.management}% and legal{" "}
-                          {feePcts.legal}% of the loan amount after equity deposit.
+                          <strong>{formatCurrency(plan.bundlePrice)}</strong>
+                          {plan.catalogBundlePrice > 0 ? (
+                            <>
+                              {" "}
+                              · Bundle price (insurance base):{" "}
+                              <strong>{formatCurrency(plan.catalogBundlePrice)}</strong>
+                            </>
+                          ) : null}{" "}
+                          · Interest: {interestM}% × {tenor} mo · Insurance {feePcts.insurance}% of bundle
+                          price; management {feePcts.management}% and legal {feePcts.legal}% of the loan
+                          amount after equity deposit.
                         </p>
                         <ul className="space-y-1 text-gray-800 border-t border-green-200 pt-2 mt-2">
                           <li className="flex justify-between gap-2">
@@ -8140,7 +8695,7 @@ const BNPLBuyNow: React.FC = () => {
                           <p className="font-semibold text-gray-800 mb-1">Administrative fees</p>
                           <ul className="space-y-0.5">
                             <li className="flex justify-between gap-2">
-                              <span>Insurance ({feePcts.insurance}% of loan calculator total)</span>
+                              <span>Insurance ({feePcts.insurance}% of bundle price)</span>
                               <span className="tabular-nums">{formatCurrency(plan.insuranceFee)}</span>
                             </li>
                             <li className="flex justify-between gap-2">

@@ -179,12 +179,13 @@ export const acceptBNPLInstallationDate = async (
 // PUT /api/admin/bnpl/applications/{id}/installation-date/reject
 export const rejectBNPLInstallationDate = async (
   applicationId: number | string,
-  token: string
+  token: string,
+  payload: { proposed_date: string; note?: string }
 ): Promise<{ status: string; data?: any; message: string }> => {
   return await apiCall(
     API_ENDPOINTS.ADMIN.BNPLApplicationInstallationDateReject(applicationId),
     "PUT",
-    undefined,
+    payload,
     token
   );
 };
