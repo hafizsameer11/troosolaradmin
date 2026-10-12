@@ -5976,7 +5976,7 @@ const BNPLBuyNow: React.FC = () => {
                                       <h4 className="text-sm font-semibold text-gray-800 mb-3">Business details</h4>
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div><p className="text-xs text-gray-500 mb-1">Business name</p><p className="text-sm font-medium text-gray-900">{bnplDash(biz.business_name)}</p></div>
-                                        <div><p className="text-xs text-gray-500 mb-1">RC/BN</p><p className="text-sm font-medium text-gray-900">{bnplDash(biz.business_rc_bn)}</p></div>
+                                        <div><p className="text-xs text-gray-500 mb-1">Business Registration Number (RC, BN or other)</p><p className="text-sm font-medium text-gray-900">{bnplDash(biz.business_rc_bn)}</p></div>
                                         <div className="md:col-span-2"><p className="text-xs text-gray-500 mb-1">Business address</p><p className="text-sm font-medium text-gray-900">{bnplDash(biz.business_address)}</p></div>
                                         <div><p className="text-xs text-gray-500 mb-1">Business bank account</p><p className="text-sm font-medium text-gray-900">{bnplDash(biz.business_bank_account_no)}</p></div>
                                         <div><p className="text-xs text-gray-500 mb-1">Business bank name</p><p className="text-sm font-medium text-gray-900">{bnplDash(biz.business_bank_name)}</p></div>
