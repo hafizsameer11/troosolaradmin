@@ -306,11 +306,6 @@ function bnplCatalogBundlePriceFromSnapshotForCounter(
   return 0;
 }
 
-/** @deprecated Use bnplLoanCalculatorTotalFromSnapshotForCounter */
-function bnplBundlePriceFromSnapshotForCounter(snap: Record<string, unknown> | null | undefined): number {
-  return bnplLoanCalculatorTotalFromSnapshotForCounter(snap);
-}
-
 function bnplFeePctsForCounter(snap: Record<string, unknown> | null | undefined): {
   insurance: number;
   management: number;
@@ -465,30 +460,6 @@ function bnplFormatMoneyInput(raw: string): string {
   const parts = cleaned.split(".");
   const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   return parts.length > 1 ? `${intPart}.${parts[1]}` : intPart;
-}
-
-function bnplPlanFromSnapshotForCounter(
-  snap: Record<string, unknown> | null | undefined
-): BnplCounterPlan | null {
-  if (!snap || typeof snap !== "object") return null;
-  const loanCalcTotal = bnplLoanCalculatorTotalFromSnapshotForCounter(snap);
-  const catalogBundle = bnplCatalogBundlePriceFromSnapshotForCounter(snap);
-  const depositPercent = bnplParseAmountCounter(snap.depositPercent);
-  const tenor = Math.round(bnplParseAmountCounter(snap.tenor));
-  const feePcts = bnplFeePctsForCounter(snap);
-  const interestM = bnplInterestMonthlyForCounter(snap, 4);
-  // Recompute from deposit % so insurance is always on catalog bundle price.
-  if (loanCalcTotal > 0 && depositPercent > 0 && tenor > 0) {
-    return bnplComputeCounterOfferPlan(
-      loanCalcTotal,
-      depositPercent,
-      tenor,
-      interestM,
-      feePcts,
-      catalogBundle
-    );
-  }
-  return null;
 }
 
 function bnplDepositPercentFromUpfrontTotal(
@@ -5346,7 +5317,6 @@ const BNPLBuyNow: React.FC = () => {
                           return Number.isFinite(n) ? n : null;
                         };
 
-                        const statusLower = String(selectedItem?.status ?? selectedItem?.order_status ?? "").toLowerCase();
                         const hadCounterOffer =
                           !!(selectedItem as Record<string, unknown>)?.had_counter_offer ||
                           (bnplParseAmountCounter(selectedItem?.counter_offer_min_deposit) > 0 &&
