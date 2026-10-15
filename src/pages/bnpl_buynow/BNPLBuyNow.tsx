@@ -280,7 +280,7 @@ function bnplLoanCalculatorTotalFromSnapshotForCounter(
 
 /**
  * Catalog bundle / product subtotal for insurance — same as LoanCalculator `bundlePrice` prop.
- * Insurance is 1% (or settings %) of this, NOT of the loan calculator total.
+ * Insurance is settings-% of this, NEVER of the VAT-inclusive loan calculator total.
  */
 function bnplCatalogBundlePriceFromSnapshotForCounter(
   snap: Record<string, unknown> | null | undefined
@@ -288,11 +288,21 @@ function bnplCatalogBundlePriceFromSnapshotForCounter(
   if (!snap || typeof snap !== "object") return 0;
   const fromSnap =
     bnplParseAmountCounter(snap.bundlePrice) ||
+    bnplParseAmountCounter(snap.catalogSubtotal) ||
     bnplParseAmountCounter(snap.netAmount) ||
-    bnplParseAmountCounter(snap.amountExcludingVat) ||
-    bnplParseAmountCounter(snap.catalogSubtotal);
+    bnplParseAmountCounter(snap.amountExcludingVat);
   if (fromSnap > 0) return fromSnap;
-  // Last resort: do not invent a wrong base — caller may fall back to loan calculator total.
+
+  // Older snapshots may omit bundlePrice — reverse VAT from the VAT-inclusive calculator total.
+  const loanCalc = bnplLoanCalculatorTotalFromSnapshotForCounter(snap);
+  const vatAmt = bnplParseAmountCounter(snap.vatAmount);
+  if (loanCalc > 0 && vatAmt > 0 && vatAmt < loanCalc) {
+    return Math.round((loanCalc - vatAmt) * 100) / 100;
+  }
+  const vatPct = bnplParseAmountCounter(snap.vatPercent) || 7.5;
+  if (loanCalc > 0 && vatPct > 0) {
+    return Math.round((loanCalc / (1 + vatPct / 100)) * 100) / 100;
+  }
   return 0;
 }
 
@@ -363,10 +373,14 @@ function bnplComputeCounterOfferPlan(
   const i = feePcts.insurance / 100;
   const m = feePcts.management / 100;
   const l = feePcts.legal / 100;
-  const insuranceBase =
-    catalogBundlePrice != null && catalogBundlePrice > 0
-      ? catalogBundlePrice
-      : loanCalculatorTotal;
+  // Never use loan-calculator (VAT-inclusive) total as insurance base.
+  let insuranceBase =
+    catalogBundlePrice != null && catalogBundlePrice > 0 ? catalogBundlePrice : 0;
+  if (!(insuranceBase > 0) && loanCalculatorTotal > 0) {
+    // Last-resort ex-VAT estimate so insurance is not 1% of grand total.
+    insuranceBase = Math.round((loanCalculatorTotal / 1.075) * 100) / 100;
+  }
+  if (!(insuranceBase > 0)) return null;
   // LoanCalculator.jsx: depositAmount = (grandTotal * depositPercent) / 100; principal = grandTotal - depositAmount
   const baseDeposit = (loanCalculatorTotal * depositPercentOfBundle) / 100;
   const baseLoanAmount = Math.max(loanCalculatorTotal - baseDeposit, 0);
@@ -460,41 +474,21 @@ function bnplPlanFromSnapshotForCounter(
   const loanCalcTotal = bnplLoanCalculatorTotalFromSnapshotForCounter(snap);
   const catalogBundle = bnplCatalogBundlePriceFromSnapshotForCounter(snap);
   const depositPercent = bnplParseAmountCounter(snap.depositPercent);
-  const baseDeposit = bnplParseAmountCounter(snap.baseDepositAmount);
-  const totalLoanAmount = bnplParseAmountCounter(snap.totalLoanAmount ?? snap.principal);
-  const insuranceFee = bnplParseAmountCounter(snap.insuranceFee);
-  const managementFee = bnplParseAmountCounter(snap.managementFee);
-  const legalFee = bnplParseAmountCounter(snap.legalFee);
-  const adminFeesTotal = bnplParseAmountCounter(snap.adminFeesTotal);
-  const upfrontDepositTotal = bnplParseAmountCounter(snap.depositAmount);
-  const totalInterestAmount = bnplParseAmountCounter(snap.totalInterestAmount ?? snap.totalInterest);
-  const totalRepaymentAmount = bnplParseAmountCounter(snap.totalRepaymentAmount ?? snap.totalRepayment);
-  const monthlyRepaymentAmount = bnplParseAmountCounter(snap.monthlyRepaymentAmount ?? snap.monthlyRepayment);
-  if (
-    loanCalcTotal <= 0 ||
-    totalLoanAmount <= 0 ||
-    totalRepaymentAmount <= 0 ||
-    monthlyRepaymentAmount <= 0 ||
-    upfrontDepositTotal <= 0
-  ) {
-    return null;
+  const tenor = Math.round(bnplParseAmountCounter(snap.tenor));
+  const feePcts = bnplFeePctsForCounter(snap);
+  const interestM = bnplInterestMonthlyForCounter(snap, 4);
+  // Recompute from deposit % so insurance is always on catalog bundle price.
+  if (loanCalcTotal > 0 && depositPercent > 0 && tenor > 0) {
+    return bnplComputeCounterOfferPlan(
+      loanCalcTotal,
+      depositPercent,
+      tenor,
+      interestM,
+      feePcts,
+      catalogBundle
+    );
   }
-  return {
-    bundlePrice: loanCalcTotal,
-    catalogBundlePrice: catalogBundle > 0 ? catalogBundle : loanCalcTotal,
-    depositPercent,
-    baseDeposit,
-    baseLoanAmount: totalLoanAmount,
-    insuranceFee,
-    managementFee,
-    legalFee,
-    adminFeesTotal,
-    upfrontDepositTotal,
-    totalLoanAmount,
-    totalInterestAmount,
-    totalRepaymentAmount,
-    monthlyRepaymentAmount,
-  };
+  return null;
 }
 
 function bnplDepositPercentFromUpfrontTotal(
@@ -509,10 +503,11 @@ function bnplDepositPercentFromUpfrontTotal(
   const l = feePcts.legal / 100;
   const denom = 1 - m - l;
   if (denom <= 0.0001) return 0;
-  const insuranceBase =
-    catalogBundlePrice != null && catalogBundlePrice > 0
-      ? catalogBundlePrice
-      : loanCalculatorTotal;
+  let insuranceBase =
+    catalogBundlePrice != null && catalogBundlePrice > 0 ? catalogBundlePrice : 0;
+  if (!(insuranceBase > 0)) {
+    insuranceBase = Math.round((loanCalculatorTotal / 1.075) * 100) / 100;
+  }
   // upfront = baseDeposit + insuranceBase*i + (loanCalcTotal - baseDeposit)*(m+l)
   const baseDeposit =
     (upfrontTotal - insuranceBase * i - loanCalculatorTotal * (m + l)) / denom;
@@ -772,7 +767,6 @@ const BNPLBuyNow: React.FC = () => {
   const [savingGuarantor, setSavingGuarantor] = useState(false);
   const [savingInstallationAccept, setSavingInstallationAccept] = useState(false);
   const [savingInstallationReject, setSavingInstallationReject] = useState(false);
-  const [showInstallationRejectForm, setShowInstallationRejectForm] = useState(false);
   const [installationRejectProposedDate, setInstallationRejectProposedDate] = useState("");
   const [installationRejectNote, setInstallationRejectNote] = useState("");
   // Send to Partner (like loan flow - before approving)
@@ -1532,6 +1526,21 @@ const BNPLBuyNow: React.FC = () => {
     },
   });
 
+  const seedInstallationRejectDefaults = useCallback((d: any) => {
+    if (
+      String(d?.installation_booking_status || "").toLowerCase() === "pending" &&
+      d?.installation_requested_date
+    ) {
+      const min = new Date();
+      min.setDate(min.getDate() + 1);
+      setInstallationRejectProposedDate(min.toISOString().slice(0, 10));
+      setInstallationRejectNote("");
+    } else {
+      setInstallationRejectProposedDate("");
+      setInstallationRejectNote("");
+    }
+  }, []);
+
   const openApplicationDetail = useCallback(
     async (applicationId: number) => {
       if (!token) return;
@@ -1567,6 +1576,7 @@ const BNPLBuyNow: React.FC = () => {
             email: d.guarantor?.email || "",
             relationship: d.guarantor?.relationship || "",
           });
+          seedInstallationRejectDefaults(d);
         }
         setShowDetailModal(true);
       } catch (error) {
@@ -1574,7 +1584,7 @@ const BNPLBuyNow: React.FC = () => {
         alert("Failed to load BNPL application.");
       }
     },
-    [token]
+    [token, seedInstallationRejectDefaults]
   );
 
   const openOrderDetail = useCallback(
@@ -1652,7 +1662,6 @@ const BNPLBuyNow: React.FC = () => {
 
   const handleViewDetails = async (item: any) => {
     setSelectedItem(item);
-    setShowInstallationRejectForm(false);
     setInstallationRejectProposedDate("");
     setInstallationRejectNote("");
     setDetailModalTab("Details");
@@ -1721,6 +1730,7 @@ const BNPLBuyNow: React.FC = () => {
           email: d.guarantor?.email || "",
           relationship: d.guarantor?.relationship || "",
         });
+        seedInstallationRejectDefaults(d);
       }
       setShowDetailModal(true);
     } catch (error) {
@@ -1956,18 +1966,10 @@ const BNPLBuyNow: React.FC = () => {
         snap ?? undefined,
         Number(selectedItem?.mono?.interest_rate) || 4
       );
-      const snapPlan = bnplPlanFromSnapshotForCounter(snap ?? undefined);
-      const snapPct = bnplParseAmountCounter(snap?.depositPercent);
-      const snapTenor = bnplParseAmountCounter(snap?.tenor);
-      const shouldUseSnapshotPlan =
-        !!snapPlan &&
-        Math.abs(percent - snapPct) < 0.01 &&
-        Math.abs(tenor - snapTenor) < 0.01;
-      const plan = shouldUseSnapshotPlan
-        ? snapPlan
-        : bnplComputeCounterOfferPlan(bundle, percent, tenor, interestM, feePcts, catalogBundle);
+      // Always recompute so insurance is % of catalog bundle price (never reuse stale snapshot fees).
+      const plan = bnplComputeCounterOfferPlan(bundle, percent, tenor, interestM, feePcts, catalogBundle);
       if (!plan) {
-        alert("Could not compute counter-offer amounts. Check deposit % and tenor.");
+        alert("Could not compute counter-offer amounts. Check deposit %, tenor, and bundle price on the loan plan snapshot.");
         return;
       }
       payload.counter_offer_min_deposit = plan.upfrontDepositTotal;
@@ -6008,14 +6010,37 @@ const BNPLBuyNow: React.FC = () => {
                                 </div>
                               </div>
                             </div>
-                            {upfrontDue > 0 && (
-                              <div className="mt-4 bg-white rounded-lg p-4 border-2 border-[#273E8E]">
-                                <p className="text-sm text-gray-600">
-                                  Customer down payment due:{" "}
-                                  <strong className="text-[#273E8E]">{bnplFormatNaira(upfrontDue)}</strong>
-                                </p>
-                              </div>
-                            )}
+                            {upfrontDue > 0 && (() => {
+                              const downPaid =
+                                selectedItem.down_payment_completed === true ||
+                                ["paid", "completed", "success"].includes(
+                                  String(selectedItem.linked_bnpl_order?.payment_status || "").toLowerCase()
+                                );
+                              return (
+                                <div
+                                  className={`mt-4 rounded-lg p-4 border-2 ${
+                                    downPaid
+                                      ? "bg-green-50 border-green-300"
+                                      : "bg-white border-[#273E8E]"
+                                  }`}
+                                >
+                                  <p className={`text-sm ${downPaid ? "text-green-800" : "text-gray-600"}`}>
+                                    {downPaid ? (
+                                      <>
+                                        Customer down payment:{" "}
+                                        <strong className="text-green-800">Paid</strong>
+                                        {" "}({bnplFormatNaira(upfrontDue)})
+                                      </>
+                                    ) : (
+                                      <>
+                                        Customer down payment due:{" "}
+                                        <strong className="text-[#273E8E]">{bnplFormatNaira(upfrontDue)}</strong>
+                                      </>
+                                    )}
+                                  </p>
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })()}
@@ -6634,7 +6659,8 @@ const BNPLBuyNow: React.FC = () => {
                         <div className="space-y-3">
                           {selectedItem?.installation_requested_date && (
                             <p className="text-sm text-gray-700">
-                              <span className="font-medium">Requested date:</span> {selectedItem.installation_requested_date}
+                              <span className="font-medium">Requested date:</span>{" "}
+                              {String(selectedItem.installation_requested_date).slice(0, 10)}
                             </p>
                           )}
                           <p className="text-sm text-gray-700">
@@ -6654,154 +6680,133 @@ const BNPLBuyNow: React.FC = () => {
                             </p>
                           )}
                           {selectedItem.installation_booking_status === "pending" && selectedItem.installation_requested_date && (
-                            <div className="space-y-3">
-                              <div className="flex gap-2">
-                                <button
-                                  type="button"
-                                  disabled={savingInstallationAccept || savingInstallationReject || showInstallationRejectForm}
-                                  onClick={async () => {
-                                    if (!selectedItem?.id || !token) return;
-                                    setSavingInstallationAccept(true);
-                                    try {
-                                      await acceptBNPLInstallationDate(selectedItem.id, token);
-                                      queryClient.invalidateQueries({ queryKey: ["bnpl-applications"] });
-                                      const fresh = await getBNPLApplication(selectedItem.id, token);
-                                      setSelectedItem(fresh.data);
-                                      setShowInstallationRejectForm(false);
-                                      alert("Installation date accepted.");
-                                    } catch (err: any) {
-                                      const msg =
-                                        err?.response?.data?.message ||
-                                        err?.message ||
-                                        "Failed to accept installation date.";
-                                      alert(msg);
-                                    } finally {
-                                      setSavingInstallationAccept(false);
+                            <div className="space-y-4">
+                              <button
+                                type="button"
+                                disabled={savingInstallationAccept || savingInstallationReject}
+                                onClick={async () => {
+                                  if (!selectedItem?.id || !token) return;
+                                  setSavingInstallationAccept(true);
+                                  try {
+                                    await acceptBNPLInstallationDate(selectedItem.id, token);
+                                    queryClient.invalidateQueries({ queryKey: ["bnpl-applications"] });
+                                    const fresh = await getBNPLApplication(selectedItem.id, token);
+                                    setSelectedItem(fresh.data);
+                                    setInstallationRejectProposedDate("");
+                                    setInstallationRejectNote("");
+                                    alert("Installation date accepted.");
+                                  } catch (err: any) {
+                                    const msg =
+                                      err?.response?.data?.message ||
+                                      err?.message ||
+                                      "Failed to accept installation date.";
+                                    alert(msg);
+                                  } finally {
+                                    setSavingInstallationAccept(false);
+                                  }
+                                }}
+                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                              >
+                                {savingInstallationAccept ? "Accepting..." : "Accept requested date"}
+                              </button>
+
+                              {/* Always visible — API requires proposed_date on reject */}
+                              <div className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-3">
+                                <p className="text-sm font-medium text-red-900">
+                                  Or reject and propose another date
+                                </p>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Suggested installation date <span className="text-red-600">*</span>
+                                  </label>
+                                  <input
+                                    type="date"
+                                    required
+                                    min={(() => {
+                                      const d = new Date();
+                                      d.setDate(d.getDate() + 1);
+                                      return d.toISOString().slice(0, 10);
+                                    })()}
+                                    value={installationRejectProposedDate}
+                                    onChange={(e) =>
+                                      setInstallationRejectProposedDate(e.target.value)
                                     }
-                                  }}
-                                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-                                >
-                                  {savingInstallationAccept ? "Accepting..." : "Accept"}
-                                </button>
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+                                  />
+                                  <p className="mt-1 text-xs text-gray-500">
+                                    Required. Must be after today. Sundays are not available.
+                                  </p>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Note to customer (optional)
+                                  </label>
+                                  <textarea
+                                    rows={3}
+                                    value={installationRejectNote}
+                                    onChange={(e) => setInstallationRejectNote(e.target.value)}
+                                    placeholder="Explain why the date was rejected or any scheduling instructions…"
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+                                  />
+                                </div>
                                 <button
                                   type="button"
                                   disabled={savingInstallationAccept || savingInstallationReject}
-                                  onClick={() => {
-                                    setShowInstallationRejectForm(true);
-                                    const min = new Date();
-                                    min.setDate(min.getDate() + 1);
-                                    setInstallationRejectProposedDate(min.toISOString().slice(0, 10));
-                                    setInstallationRejectNote("");
+                                  onClick={async () => {
+                                    if (!selectedItem?.id || !token) return;
+                                    const proposed = installationRejectProposedDate;
+                                    if (!proposed) {
+                                      alert("Please choose a suggested installation date.");
+                                      return;
+                                    }
+                                    const day = new Date(`${proposed}T12:00:00`).getDay();
+                                    if (day === 0) {
+                                      alert("Sundays are not available. Please choose another day.");
+                                      return;
+                                    }
+                                    const requestedYmd = String(
+                                      selectedItem.installation_requested_date || ""
+                                    ).slice(0, 10);
+                                    if (proposed === requestedYmd) {
+                                      alert(
+                                        "Suggested date must be different from the customer's requested date."
+                                      );
+                                      return;
+                                    }
+                                    setSavingInstallationReject(true);
+                                    try {
+                                      await rejectBNPLInstallationDate(selectedItem.id, token, {
+                                        proposed_date: proposed,
+                                        note: installationRejectNote.trim() || undefined,
+                                      });
+                                      queryClient.invalidateQueries({ queryKey: ["bnpl-applications"] });
+                                      const fresh = await getBNPLApplication(selectedItem.id, token);
+                                      setSelectedItem(fresh.data);
+                                      setInstallationRejectProposedDate("");
+                                      setInstallationRejectNote("");
+                                      alert(
+                                        "Installation date rejected. Customer has been notified with your suggested date."
+                                      );
+                                    } catch (err: any) {
+                                      const msg =
+                                        err?.response?.data?.message ||
+                                        (err?.response?.data?.errors
+                                          ? Object.values(err.response.data.errors).flat().join(" ")
+                                          : null) ||
+                                        err?.message ||
+                                        "Failed to reject installation date.";
+                                      alert(msg);
+                                    } finally {
+                                      setSavingInstallationReject(false);
+                                    }
                                   }}
                                   className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
                                 >
-                                  Reject
+                                  {savingInstallationReject
+                                    ? "Rejecting..."
+                                    : "Reject & send suggested date"}
                                 </button>
                               </div>
-                              {showInstallationRejectForm && (
-                                <div className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-3">
-                                  <p className="text-sm font-medium text-red-900">
-                                    Reject this date and send an alternate date to the customer
-                                  </p>
-                                  <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                      Suggested installation date
-                                    </label>
-                                    <input
-                                      type="date"
-                                      min={(() => {
-                                        const d = new Date();
-                                        d.setDate(d.getDate() + 1);
-                                        return d.toISOString().slice(0, 10);
-                                      })()}
-                                      value={installationRejectProposedDate}
-                                      onChange={(e) => setInstallationRejectProposedDate(e.target.value)}
-                                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
-                                    />
-                                    <p className="mt-1 text-xs text-gray-500">Sundays are not available.</p>
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                      Note to customer (optional)
-                                    </label>
-                                    <textarea
-                                      rows={3}
-                                      value={installationRejectNote}
-                                      onChange={(e) => setInstallationRejectNote(e.target.value)}
-                                      placeholder="Explain why the date was rejected or any scheduling instructions…"
-                                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
-                                    />
-                                  </div>
-                                  <div className="flex gap-2">
-                                    <button
-                                      type="button"
-                                      disabled={savingInstallationReject}
-                                      onClick={() => {
-                                        setShowInstallationRejectForm(false);
-                                        setInstallationRejectProposedDate("");
-                                        setInstallationRejectNote("");
-                                      }}
-                                      className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white"
-                                    >
-                                      Cancel
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={
-                                        savingInstallationReject ||
-                                        !installationRejectProposedDate
-                                      }
-                                      onClick={async () => {
-                                        if (!selectedItem?.id || !token || !installationRejectProposedDate) return;
-                                        const day = new Date(`${installationRejectProposedDate}T12:00:00`).getDay();
-                                        if (day === 0) {
-                                          alert("Sundays are not available. Please choose another day.");
-                                          return;
-                                        }
-                                        if (
-                                          installationRejectProposedDate ===
-                                          String(selectedItem.installation_requested_date || "").slice(0, 10)
-                                        ) {
-                                          alert("Suggested date must be different from the customer's requested date.");
-                                          return;
-                                        }
-                                        setSavingInstallationReject(true);
-                                        try {
-                                          await rejectBNPLInstallationDate(selectedItem.id, token, {
-                                            proposed_date: installationRejectProposedDate,
-                                            note: installationRejectNote.trim() || undefined,
-                                          });
-                                          queryClient.invalidateQueries({ queryKey: ["bnpl-applications"] });
-                                          const fresh = await getBNPLApplication(selectedItem.id, token);
-                                          setSelectedItem(fresh.data);
-                                          setShowInstallationRejectForm(false);
-                                          setInstallationRejectProposedDate("");
-                                          setInstallationRejectNote("");
-                                          alert(
-                                            "Installation date rejected. Customer has been notified with your suggested date."
-                                          );
-                                        } catch (err: any) {
-                                          const msg =
-                                            err?.response?.data?.message ||
-                                            (err?.response?.data?.errors
-                                              ? Object.values(err.response.data.errors).flat().join(" ")
-                                              : null) ||
-                                            err?.message ||
-                                            "Failed to reject installation date.";
-                                          alert(msg);
-                                        } finally {
-                                          setSavingInstallationReject(false);
-                                        }
-                                      }}
-                                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-                                    >
-                                      {savingInstallationReject
-                                        ? "Sending..."
-                                        : "Send suggested date"}
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           )}
                           {Array.isArray(selectedItem.installation_rejected_dates) && selectedItem.installation_rejected_dates.length > 0 && (
@@ -8629,18 +8634,8 @@ const BNPLBuyNow: React.FC = () => {
                       snap ?? undefined,
                       Number(selectedItem?.mono?.interest_rate) || 4
                     );
-                    const snapPlan = bnplPlanFromSnapshotForCounter(snap ?? undefined);
-                    const snapPct = bnplParseAmountCounter(snap?.depositPercent);
-                    const snapTenor = bnplParseAmountCounter(snap?.tenor);
-                    const shouldUseSnapshotPlan =
-                      !!snapPlan &&
-                      pct > 0 &&
-                      tenor > 0 &&
-                      Math.abs(pct - snapPct) < 0.01 &&
-                      Math.abs(tenor - snapTenor) < 0.01;
-                    const plan = shouldUseSnapshotPlan
-                      ? snapPlan
-                      : bundle > 0 && pct > 0 && pct <= 100 && tenor > 0
+                    const plan =
+                      bundle > 0 && pct > 0 && pct <= 100 && tenor > 0
                         ? bnplComputeCounterOfferPlan(bundle, pct, tenor, interestM, feePcts, catalogBundle)
                         : null;
                     if (!plan) {
@@ -8658,16 +8653,14 @@ const BNPLBuyNow: React.FC = () => {
                         <p className="text-xs text-gray-600">
                           Loan calculator total (principal + equity):{" "}
                           <strong>{formatCurrency(plan.bundlePrice)}</strong>
-                          {plan.catalogBundlePrice > 0 ? (
-                            <>
-                              {" "}
-                              · Bundle price (insurance base):{" "}
-                              <strong>{formatCurrency(plan.catalogBundlePrice)}</strong>
-                            </>
-                          ) : null}{" "}
-                          · Interest: {interestM}% × {tenor} mo · Insurance {feePcts.insurance}% of bundle
-                          price; management {feePcts.management}% and legal {feePcts.legal}% of the loan
-                          amount after equity deposit.
+                          {" "}
+                          · Bundle price (insurance base):{" "}
+                          <strong>{formatCurrency(plan.catalogBundlePrice)}</strong>
+                          {" "}
+                          · Interest: {interestM}% × {tenor} mo · Insurance {feePcts.insurance}% of{" "}
+                          <strong>bundle price</strong> (not loan calculator total); management{" "}
+                          {feePcts.management}% and legal {feePcts.legal}% of the loan amount after equity
+                          deposit.
                         </p>
                         <ul className="space-y-1 text-gray-800 border-t border-green-200 pt-2 mt-2">
                           <li className="flex justify-between gap-2">
@@ -8695,7 +8688,10 @@ const BNPLBuyNow: React.FC = () => {
                           <p className="font-semibold text-gray-800 mb-1">Administrative fees</p>
                           <ul className="space-y-0.5">
                             <li className="flex justify-between gap-2">
-                              <span>Insurance ({feePcts.insurance}% of bundle price)</span>
+                              <span>
+                                Insurance ({feePcts.insurance}% of bundle price{" "}
+                                {formatCurrency(plan.catalogBundlePrice)})
+                              </span>
                               <span className="tabular-nums">{formatCurrency(plan.insuranceFee)}</span>
                             </li>
                             <li className="flex justify-between gap-2">
