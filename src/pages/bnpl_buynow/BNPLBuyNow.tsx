@@ -557,29 +557,64 @@ function bnplFinancingTypeLabel(app: Record<string, unknown> | null | undefined)
   };
 }
 
+/**
+ * Financed principal (Total Loan Amount) — never total repayment (principal + interest).
+ * app.loan_amount was historically overwritten with total repayment after counter-offer approval.
+ */
 function bnplDisplayLoanAmount(app: Record<string, unknown> | null | undefined): number | null {
   if (!app) return null;
   const toNum = (v: unknown): number | null => {
     if (v === null || v === undefined || v === "") return null;
     const n = typeof v === "number" ? v : parseFloat(String(v).replace(/,/g, ""));
-    return Number.isFinite(n) ? n : null;
+    return Number.isFinite(n) && n > 0 ? n : null;
   };
-  if (bnplIsPartnerApplication(app)) {
-    const snap = (app.loan_plan_snapshot && typeof app.loan_plan_snapshot === "object"
-      ? (app.loan_plan_snapshot as Record<string, unknown>)
-      : null);
-    const mono = (app.mono && typeof app.mono === "object"
-      ? (app.mono as Record<string, unknown>)
-      : null);
+  const snap = (app.loan_plan_snapshot && typeof app.loan_plan_snapshot === "object"
+    ? (app.loan_plan_snapshot as Record<string, unknown>)
+    : null);
+  const mono = (app.mono && typeof app.mono === "object"
+    ? (app.mono as Record<string, unknown>)
+    : null);
+  const co = (app.counter_offer_details && typeof app.counter_offer_details === "object"
+    ? (app.counter_offer_details as Record<string, unknown>)
+    : null);
+
+  if (bnplIsPartnerApplication(app) || bnplHadPartnerOffer(app)) {
     const partnerPrincipal =
+      toNum(app.partner_offer_loan_amount) ??
       toNum(snap?.totalLoanAmount) ??
       toNum(snap?.principal) ??
       toNum(mono?.loan_amount) ??
-      toNum(mono?.principal_amount) ??
-      toNum(app.partner_offer_loan_amount);
-    if (partnerPrincipal != null && partnerPrincipal > 0) return partnerPrincipal;
+      toNum(mono?.principal_amount);
+    if (partnerPrincipal != null) return partnerPrincipal;
   }
-  return toNum(app.loan_amount);
+
+  // Counter-offer / approved Troosolar: prefer principal from counter details or mono.
+  const counterPrincipal =
+    toNum(co?.total_loan_amount) ??
+    toNum(co?.loan_amount) ??
+    toNum(co?.base_loan_amount);
+  const monoPrincipal = toNum(mono?.loan_amount) ?? toNum(mono?.principal_amount);
+  const snapPrincipal = toNum(snap?.totalLoanAmount) ?? toNum(snap?.principal);
+  const stored = toNum(app.loan_amount);
+  const repayment =
+    toNum(co?.total_repayment_amount) ??
+    toNum(co?.total_amount) ??
+    toNum(snap?.totalRepaymentAmount) ??
+    toNum(snap?.totalRepayment);
+
+  // If stored loan_amount equals total repayment, it is the legacy wrong field — ignore it.
+  const storedIsRepayment =
+    stored != null &&
+    repayment != null &&
+    Math.abs(stored - repayment) < 0.02;
+
+  return (
+    counterPrincipal ??
+    monoPrincipal ??
+    snapPrincipal ??
+    (storedIsRepayment ? null : stored) ??
+    stored
+  );
 }
 
 const GENERIC_INVOICE_BUCKET_LABELS = new Set([
