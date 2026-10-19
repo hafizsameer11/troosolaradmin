@@ -7964,16 +7964,36 @@ const BNPLBuyNow: React.FC = () => {
                           <span className="ml-2 font-medium">{orderInvoice.order_number || selectedItem.id}</span>
                         </div>
                         <div>
-                          <span className="text-gray-600">Total paid:</span>
+                          <span className="text-gray-600">
+                            {activeTab === "BNPL Orders" ? "Invoice grand total:" : "Total paid:"}
+                          </span>
                           <span className="ml-2 font-medium text-[#273E8E]">
                             {formatCurrency(
                               orderInvoice.invoice?.grand_total
                                 ?? orderInvoice.invoice?.total
                                 ?? orderInvoice.total
-                                ?? selectedItem.total_price
+                                ?? (activeTab === "BNPL Orders"
+                                  ? null
+                                  : selectedItem.total_price)
                             )}
                           </span>
                         </div>
+                        {activeTab === "BNPL Orders" &&
+                          (selectedItem.loan_details?.down_payment != null ||
+                            selectedItem.mono_calculation?.down_payment != null) && (
+                          <div className="col-span-2">
+                            <span className="text-gray-600">Down payment paid:</span>
+                            <span className="ml-2 font-medium text-green-700">
+                              {formatCurrency(
+                                selectedItem.loan_details?.down_payment ??
+                                  selectedItem.mono_calculation?.down_payment
+                              )}
+                            </span>
+                            <span className="ml-2 text-xs text-gray-500">
+                              (installments are tracked on the Payments tab — not included in invoice grand total)
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
