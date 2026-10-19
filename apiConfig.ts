@@ -248,6 +248,8 @@ const API_ENDPOINTS = {
     BNPLOrdersList: API_DOMAIN + "/admin/orders/bnpl", // GET
     BNPLOrderShow: (id: number | string) =>
       `${API_DOMAIN}/admin/orders/bnpl/${id}`, // GET
+    BNPLOrderUpdateStatus: (id: number | string) =>
+      `${API_DOMAIN}/admin/orders/bnpl/${id}/status`, // PUT
 
     // --- Order Details Endpoints ---
     OrderSummary: (id: number | string) =>

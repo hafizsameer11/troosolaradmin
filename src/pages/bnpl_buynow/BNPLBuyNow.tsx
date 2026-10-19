@@ -32,6 +32,7 @@ import {
   updateBNPLApplicationStatus,
   updateBNPLGuarantorStatus,
   updateBuyNowOrderStatus,
+  updateBNPLOrderStatus,
   createCustomOrder,
   removeCartItem,
   clearUserCart,
@@ -555,6 +556,23 @@ function bnplFinancingTypeLabel(app: Record<string, unknown> | null | undefined)
     label: "Troosolar",
     className: "bg-slate-50 text-slate-700 border border-slate-200",
   };
+}
+
+/** BNPL order row/detail: partner financing when linked application has partner path or partner offer. */
+function bnplOrderIsPartner(order: Record<string, unknown> | null | undefined): boolean {
+  if (!order) return false;
+  const la = (order.loan_application && typeof order.loan_application === "object"
+    ? (order.loan_application as Record<string, unknown>)
+    : null);
+  if (bnplHadPartnerOffer(la) || bnplIsPartnerApplication(la)) return true;
+  return false;
+}
+
+function bnplOrderDownPaymentPaid(order: Record<string, unknown> | null | undefined): boolean {
+  if (!order) return false;
+  return ["paid", "completed", "success"].includes(
+    String(order.payment_status || "").toLowerCase()
+  );
 }
 
 /**
@@ -1334,6 +1352,26 @@ const BNPLBuyNow: React.FC = () => {
       setShowStatusModal(false);
       setSelectedItem(null);
       setStatusForm(emptyStatusForm());
+      alert("Order status updated successfully.");
+    },
+    onError: (error: any) => {
+      alert(error?.message || error?.response?.data?.message || "Failed to update order status.");
+    },
+  });
+
+  const updateBnplOrderStatusMutation = useMutation({
+    mutationFn: async (payload: { order_status: string; admin_notes?: string }) => {
+      return await updateBNPLOrderStatus(selectedItem.id, payload, token);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bnpl-orders"] });
+      setShowStatusModal(false);
+      setSelectedItem(null);
+      setStatusForm(emptyStatusForm());
+      alert("BNPL order status updated successfully.");
+    },
+    onError: (error: any) => {
+      alert(error?.message || error?.response?.data?.message || "Failed to update BNPL order status.");
     },
   });
 
@@ -2048,6 +2086,11 @@ const BNPLBuyNow: React.FC = () => {
       updateBuyNowOrderStatusMutation.mutate({
         order_status: statusForm.status,
         admin_notes: statusForm.admin_notes,
+      });
+    } else if (activeTab === "BNPL Orders") {
+      updateBnplOrderStatusMutation.mutate({
+        order_status: statusForm.status,
+        admin_notes: statusForm.admin_notes || undefined,
       });
     } else if (activeTab === "Audit Requests") {
       if (statusForm.status === "approved") {
@@ -4036,17 +4079,36 @@ const BNPLBuyNow: React.FC = () => {
                                 <span className="text-xs text-gray-500">
                                   {item.user?.email || ""}
                                 </span>
+                                {activeTab === "BNPL Orders" && bnplOrderIsPartner(item) && (
+                                  <span className="mt-1 inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200">
+                                    Partner offer
+                                  </span>
+                                )}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
                                 {formatCurrency(item.total_price)}
+                                {activeTab === "BNPL Orders" && (
+                                  <p className="text-[11px] font-normal text-gray-500 mt-0.5">
+                                    {bnplOrderDownPaymentPaid(item)
+                                      ? "Down payment: Paid"
+                                      : "Down payment: Pending"}
+                                  </p>
+                                )}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <span
-                                  className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-full capitalize"
-                                  style={getStatusColor(getBnplOrderDisplayStatus(item))}
-                                >
-                                  {formatBnplOrderStatusLabel(getBnplOrderDisplayStatus(item))}
-                                </span>
+                                <div className="flex flex-col gap-1 items-start">
+                                  <span
+                                    className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-full capitalize"
+                                    style={getStatusColor(getBnplOrderDisplayStatus(item))}
+                                  >
+                                    {formatBnplOrderStatusLabel(getBnplOrderDisplayStatus(item))}
+                                  </span>
+                                  {activeTab === "BNPL Orders" && bnplOrderIsPartner(item) && (
+                                    <span className="text-[10px] text-indigo-700 font-medium">
+                                      Partner financing
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                 {formatDate(item.created_at)}
@@ -4320,16 +4382,19 @@ const BNPLBuyNow: React.FC = () => {
                     <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-6 border border-green-100">
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-bold text-gray-900">Order Overview</h3>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {activeTab === "BNPL Orders" && bnplOrderIsPartner(selectedItem) && (
+                            <span className="inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200">
+                              Partner offer
+                            </span>
+                          )}
                           {selectedItem.payment_status && (
                             <span
                               className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-full"
                               style={getStatusColor(selectedItem.payment_status)}
                             >
                               {activeTab === "BNPL Orders"
-                                ? ["paid", "completed", "success"].includes(
-                                    String(selectedItem.payment_status || "").toLowerCase()
-                                  )
+                                ? bnplOrderDownPaymentPaid(selectedItem)
                                   ? "Down payment: Paid"
                                   : `Down payment: ${selectedItem.payment_status}`
                                 : `Payment: ${selectedItem.payment_status}`}
@@ -4764,7 +4829,9 @@ const BNPLBuyNow: React.FC = () => {
                         ).toLowerCase();
                         const isPartnerFinancing =
                           path === "partner" ||
-                          String(la.credit_check_method || "").toLowerCase() === "partner";
+                          String(la.credit_check_method || "").toLowerCase() === "partner" ||
+                          bnplHadPartnerOffer(la) ||
+                          bnplOrderIsPartner(selectedItem as Record<string, unknown>);
                         const pick = (...vals: unknown[]) => {
                           for (const v of vals) {
                             const n = bnplParseAmountCounter(v);
@@ -9089,6 +9156,7 @@ const BNPLBuyNow: React.FC = () => {
                   updateApplicationStatusMutation.isPending ||
                   updateGuarantorStatusMutation.isPending ||
                   updateBuyNowOrderStatusMutation.isPending ||
+                  updateBnplOrderStatusMutation.isPending ||
                   updateAuditRequestStatusMutation.isPending
                 }
                 className={`px-6 py-2 rounded-full font-medium transition-colors flex items-center ${
@@ -9096,6 +9164,7 @@ const BNPLBuyNow: React.FC = () => {
                   !updateApplicationStatusMutation.isPending &&
                   !updateGuarantorStatusMutation.isPending &&
                   !updateBuyNowOrderStatusMutation.isPending &&
+                  !updateBnplOrderStatusMutation.isPending &&
                   !updateAuditRequestStatusMutation.isPending
                     ? "bg-[#273E8E] text-white hover:bg-[#1f2f7a]"
                     : "bg-gray-300 text-gray-500 cursor-not-allowed"
@@ -9104,6 +9173,7 @@ const BNPLBuyNow: React.FC = () => {
                 {(updateApplicationStatusMutation.isPending ||
                   updateGuarantorStatusMutation.isPending ||
                   updateBuyNowOrderStatusMutation.isPending ||
+                  updateBnplOrderStatusMutation.isPending ||
                   updateAuditRequestStatusMutation.isPending) && (
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
                 )}

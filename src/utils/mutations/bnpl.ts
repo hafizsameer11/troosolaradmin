@@ -359,6 +359,23 @@ export const updateBuyNowOrderStatus = async (
   );
 };
 
+// PUT /api/admin/orders/bnpl/{id}/status
+export const updateBNPLOrderStatus = async (
+  id: number | string,
+  payload: {
+    order_status: string;
+    admin_notes?: string;
+  },
+  token: string
+): Promise<{ status: string; data: unknown; message: string }> => {
+  return await apiCall(
+    API_ENDPOINTS.ADMIN.BNPLOrderUpdateStatus(id),
+    "PUT",
+    payload,
+    token
+  );
+};
+
 // POST /api/admin/cart/create-custom-order
 export const createCustomOrder = async (
   payload: {
