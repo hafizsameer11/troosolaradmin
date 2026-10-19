@@ -4326,7 +4326,13 @@ const BNPLBuyNow: React.FC = () => {
                               className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-full"
                               style={getStatusColor(selectedItem.payment_status)}
                             >
-                              Payment: {selectedItem.payment_status}
+                              {activeTab === "BNPL Orders"
+                                ? ["paid", "completed", "success"].includes(
+                                    String(selectedItem.payment_status || "").toLowerCase()
+                                  )
+                                  ? "Down payment: Paid"
+                                  : `Down payment: ${selectedItem.payment_status}`
+                                : `Payment: ${selectedItem.payment_status}`}
                             </span>
                           )}
                           {(selectedItem.order_status || selectedItem.loan_fully_paid) && (
@@ -4346,10 +4352,19 @@ const BNPLBuyNow: React.FC = () => {
                         </div>
                         {selectedItem.total_price && (
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Total Price</p>
+                            <p className="text-xs text-gray-500 mb-1">
+                              {activeTab === "BNPL Orders"
+                                ? "Total customer cost"
+                                : "Total Price"}
+                            </p>
                             <p className="text-sm font-semibold text-[#273E8E]">
                               {formatCurrency(selectedItem.total_price)}
                             </p>
+                            {activeTab === "BNPL Orders" && (
+                              <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">
+                                Down payment + all installment repayments (not the catalog bundle price)
+                              </p>
+                            )}
                           </div>
                         )}
                         {selectedItem.payment_method && (
@@ -5008,10 +5023,19 @@ const BNPLBuyNow: React.FC = () => {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {selectedItem.total_price && (
                           <div className="bg-gray-50 rounded-lg p-4">
-                            <p className="text-xs text-gray-500 mb-1">Total Price</p>
+                            <p className="text-xs text-gray-500 mb-1">
+                              {activeTab === "BNPL Orders"
+                                ? "Total customer cost"
+                                : "Total Price"}
+                            </p>
                             <p className="text-lg font-bold text-[#273E8E]">
                               {formatCurrency(selectedItem.total_price)}
                             </p>
+                            {activeTab === "BNPL Orders" && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                Down payment + all installment repayments
+                              </p>
+                            )}
                           </div>
                         )}
                         {selectedItem.payment_method && (
@@ -5022,7 +5046,7 @@ const BNPLBuyNow: React.FC = () => {
                             </p>
                           </div>
                         )}
-                        {selectedItem.payment_status && (
+                        {selectedItem.payment_status && activeTab !== "BNPL Orders" && (
                           <div className="bg-gray-50 rounded-lg p-4">
                             <p className="text-xs text-gray-500 mb-1">Payment Status</p>
                             <p className="text-lg font-bold text-gray-900 capitalize">
@@ -5263,7 +5287,11 @@ const BNPLBuyNow: React.FC = () => {
                             <p className="text-sm text-gray-700 mt-2">
                               Order #{selectedItem.linked_bnpl_order_id || selectedItem.linked_bnpl_order?.id}
                               {selectedItem.linked_bnpl_order?.payment_status
-                                ? ` · Payment: ${selectedItem.linked_bnpl_order.payment_status}`
+                                ? ["paid", "completed", "success"].includes(
+                                    String(selectedItem.linked_bnpl_order.payment_status).toLowerCase()
+                                  )
+                                  ? " · Down payment: Paid"
+                                  : ` · Down payment: ${selectedItem.linked_bnpl_order.payment_status}`
                                 : ""}
                             </p>
                           </div>
