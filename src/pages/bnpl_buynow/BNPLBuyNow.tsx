@@ -576,6 +576,48 @@ function bnplOrderDownPaymentPaid(order: Record<string, unknown> | null | undefi
 }
 
 /**
+ * System invoice grand total (catalog + fees + VAT) from the customer's loan plan —
+ * NOT orders.total_price (that is financing: down payment + all installment repayments).
+ */
+function bnplOrderSystemInvoiceTotal(order: Record<string, unknown> | null | undefined): number {
+  if (!order) return 0;
+  const la = (order.loan_application && typeof order.loan_application === "object"
+    ? (order.loan_application as Record<string, unknown>)
+    : null);
+  const snap = (la?.loan_plan_snapshot && typeof la.loan_plan_snapshot === "object"
+    ? (la.loan_plan_snapshot as Record<string, unknown>)
+    : null);
+  const fromSnap =
+    bnplParseAmountCounter(snap?.invoiceGrandTotal) ||
+    bnplParseAmountCounter(snap?.grandTotal) ||
+    bnplLoanCalculatorTotalFromSnapshotForCounter(snap);
+  if (fromSnap > 0) return fromSnap;
+  const ld = (order.loan_details && typeof order.loan_details === "object"
+    ? (order.loan_details as Record<string, unknown>)
+    : null);
+  return (
+    bnplParseAmountCounter(ld?.invoiceGrandTotal) ||
+    bnplParseAmountCounter(ld?.grandTotal) ||
+    0
+  );
+}
+
+function bnplOrderDownPaymentAmount(order: Record<string, unknown> | null | undefined): number {
+  if (!order) return 0;
+  const ld = (order.loan_details && typeof order.loan_details === "object"
+    ? (order.loan_details as Record<string, unknown>)
+    : null);
+  const mono = (order.mono_calculation && typeof order.mono_calculation === "object"
+    ? (order.mono_calculation as Record<string, unknown>)
+    : null);
+  return (
+    bnplParseAmountCounter(ld?.down_payment) ||
+    bnplParseAmountCounter(mono?.down_payment) ||
+    0
+  );
+}
+
+/**
  * Financed principal (Total Loan Amount) — never total repayment (principal + interest).
  * app.loan_amount was historically overwritten with total repayment after counter-offer approval.
  */
@@ -3905,7 +3947,7 @@ const BNPLBuyNow: React.FC = () => {
                             Customer
                           </th>
                           <th className="px-6 py-4 text-left text-sm font-medium text-black">
-                            Total Price
+                            {activeTab === "BNPL Orders" ? "Financing total" : "Total Price"}
                           </th>
                           <th className="px-6 py-4 text-left text-sm font-medium text-black">
                             Status
@@ -4088,11 +4130,16 @@ const BNPLBuyNow: React.FC = () => {
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
                                 {formatCurrency(item.total_price)}
                                 {activeTab === "BNPL Orders" && (
-                                  <p className="text-[11px] font-normal text-gray-500 mt-0.5">
-                                    {bnplOrderDownPaymentPaid(item)
-                                      ? "Down payment: Paid"
-                                      : "Down payment: Pending"}
-                                  </p>
+                                  <>
+                                    <p className="text-[11px] font-normal text-gray-500 mt-0.5">
+                                      Deposit + installments (incl. interest)
+                                    </p>
+                                    <p className="text-[11px] font-normal text-gray-500 mt-0.5">
+                                      {bnplOrderDownPaymentPaid(item)
+                                        ? "Down payment: Paid (installments separate)"
+                                        : "Down payment: Pending"}
+                                    </p>
+                                  </>
                                 )}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
@@ -4392,6 +4439,11 @@ const BNPLBuyNow: React.FC = () => {
                             <span
                               className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-full"
                               style={getStatusColor(selectedItem.payment_status)}
+                              title={
+                                activeTab === "BNPL Orders"
+                                  ? "orders.payment_status is set when the customer pays the down payment only — monthly installments are tracked on the Payments tab"
+                                  : undefined
+                              }
                             >
                               {activeTab === "BNPL Orders"
                                 ? bnplOrderDownPaymentPaid(selectedItem)
@@ -4410,16 +4462,34 @@ const BNPLBuyNow: React.FC = () => {
                           )}
                         </div>
                       </div>
+                      {activeTab === "BNPL Orders" && bnplOrderDownPaymentPaid(selectedItem) && (
+                        <p className="text-xs text-gray-600 mb-4 -mt-2">
+                          “Down payment: Paid” means only the initial deposit was collected. Monthly installments
+                          stay open until marked paid on the <span className="font-semibold">Payments</span> tab
+                          (this is not full order payment).
+                        </p>
+                      )}
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
                           <p className="text-xs text-gray-500 mb-1">Order ID</p>
                           <p className="text-sm font-semibold text-gray-900">#{selectedItem.id || "N/A"}</p>
                         </div>
+                        {activeTab === "BNPL Orders" && bnplOrderSystemInvoiceTotal(selectedItem) > 0 && (
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">System invoice (VAT incl.)</p>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {formatCurrency(bnplOrderSystemInvoiceTotal(selectedItem))}
+                            </p>
+                            <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">
+                              Catalog + fees + VAT — same as customer Invoice / Invoice tab
+                            </p>
+                          </div>
+                        )}
                         {selectedItem.total_price && (
                           <div>
                             <p className="text-xs text-gray-500 mb-1">
                               {activeTab === "BNPL Orders"
-                                ? "Total customer cost"
+                                ? "Financing total"
                                 : "Total Price"}
                             </p>
                             <p className="text-sm font-semibold text-[#273E8E]">
@@ -4427,9 +4497,22 @@ const BNPLBuyNow: React.FC = () => {
                             </p>
                             {activeTab === "BNPL Orders" && (
                               <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">
-                                Down payment + all installment repayments (not the catalog bundle price)
+                                From mono loan <span className="font-mono">total_amount</span> →{" "}
+                                <span className="font-mono">orders.total_price</span>: down payment + all
+                                installment repayments (includes interest; higher than system invoice)
                               </p>
                             )}
+                          </div>
+                        )}
+                        {activeTab === "BNPL Orders" && bnplOrderDownPaymentAmount(selectedItem) > 0 && (
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Down payment (paid)</p>
+                            <p className="text-sm font-semibold text-green-700">
+                              {formatCurrency(bnplOrderDownPaymentAmount(selectedItem))}
+                            </p>
+                            <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">
+                              What set payment_status to paid — not the full financing total
+                            </p>
                           </div>
                         )}
                         {selectedItem.payment_method && (
@@ -5088,11 +5171,22 @@ const BNPLBuyNow: React.FC = () => {
                         Order Details
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {activeTab === "BNPL Orders" && bnplOrderSystemInvoiceTotal(selectedItem) > 0 && (
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <p className="text-xs text-gray-500 mb-1">System invoice (VAT incl.)</p>
+                            <p className="text-lg font-bold text-gray-900">
+                              {formatCurrency(bnplOrderSystemInvoiceTotal(selectedItem))}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Bundle/catalog + inspection/delivery/installation + VAT
+                            </p>
+                          </div>
+                        )}
                         {selectedItem.total_price && (
                           <div className="bg-gray-50 rounded-lg p-4">
                             <p className="text-xs text-gray-500 mb-1">
                               {activeTab === "BNPL Orders"
-                                ? "Total customer cost"
+                                ? "Financing total"
                                 : "Total Price"}
                             </p>
                             <p className="text-lg font-bold text-[#273E8E]">
@@ -5100,7 +5194,9 @@ const BNPLBuyNow: React.FC = () => {
                             </p>
                             {activeTab === "BNPL Orders" && (
                               <p className="text-xs text-gray-500 mt-1">
-                                Down payment + all installment repayments
+                                Down payment + installment repayments (incl. interest). Stored as{" "}
+                                <span className="font-mono">orders.total_price</span> from mono{" "}
+                                <span className="font-mono">total_amount</span>.
                               </p>
                             )}
                           </div>
@@ -5131,23 +5227,20 @@ const BNPLBuyNow: React.FC = () => {
                         )}
                         {activeTab === "BNPL Orders" && (
                           <div className="bg-gray-50 rounded-lg p-4">
-                            <p className="text-xs text-gray-500 mb-1">Down payment</p>
+                            <p className="text-xs text-gray-500 mb-1">Down payment only</p>
                             <p className="text-lg font-bold text-gray-900">
-                              {["paid", "completed", "success"].includes(
-                                String(selectedItem.payment_status || "").toLowerCase()
-                              )
+                              {bnplOrderDownPaymentPaid(selectedItem)
                                 ? "Paid"
                                 : "Not paid / pending"}
                             </p>
-                            {(selectedItem.loan_details?.down_payment != null ||
-                              selectedItem.mono_calculation?.down_payment != null) && (
+                            {bnplOrderDownPaymentAmount(selectedItem) > 0 && (
                               <p className="text-sm text-[#273E8E] font-semibold mt-1">
-                                {formatCurrency(
-                                  selectedItem.loan_details?.down_payment ??
-                                    selectedItem.mono_calculation?.down_payment
-                                )}
+                                {formatCurrency(bnplOrderDownPaymentAmount(selectedItem))}
                               </p>
                             )}
+                            <p className="text-xs text-gray-500 mt-1">
+                              Installments are not included — see Payments tab
+                            </p>
                           </div>
                         )}
                       </div>
@@ -8101,13 +8194,25 @@ const BNPLBuyNow: React.FC = () => {
                           };
 
                           if (hasProductLines) {
+                            const isBnplInvoiceTable = activeTab === "BNPL Orders";
+                            const sumBeforeVat = Number(
+                              orderInvoice.invoice?.sum_before_vat ?? 0
+                            );
                             return (
                               <div className="mb-4">
                                 <h3 className="font-semibold text-gray-900 mb-2">
-                                  {bundleTitle ? `Order list — ${bundleTitle}` : "Product breakdown"}
+                                  {isBnplInvoiceTable
+                                    ? bundleTitle
+                                      ? `Invoice — ${bundleTitle}`
+                                      : "Invoice"
+                                    : bundleTitle
+                                      ? `Order list — ${bundleTitle}`
+                                      : "Product breakdown"}
                                 </h3>
                                 <p className="text-sm text-gray-600 mb-3">
-                                  Catalog prices per item. Order-level discount (if any) is shown in the fees breakdown below.
+                                  {isBnplInvoiceTable
+                                    ? "Same line items as the customer BNPL invoice (catalog + inspection, delivery, and installation fees)."
+                                    : "Catalog prices per item. Order-level discount (if any) is shown in the fees breakdown below."}
                                 </p>
                                 <div className="overflow-x-auto border border-gray-200 rounded-lg">
                                   <table className="min-w-full text-sm">
@@ -8120,7 +8225,7 @@ const BNPLBuyNow: React.FC = () => {
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
-                                      {productLineItems.map((row: { description?: string; quantity?: number; rate?: number; total_cost?: number }, idx: number) => (
+                                      {productLineItems.map((row: { description?: string; quantity?: number; rate?: number; total_cost?: number; type?: string }, idx: number) => (
                                         <tr key={idx}>
                                           <td className="px-3 py-2 font-medium text-gray-900">{row.description || "—"}</td>
                                           <td className="px-3 py-2">{row.quantity ?? 1}</td>
@@ -8131,6 +8236,18 @@ const BNPLBuyNow: React.FC = () => {
                                         </tr>
                                       ))}
                                     </tbody>
+                                    {isBnplInvoiceTable && sumBeforeVat > 0 && (
+                                      <tfoot>
+                                        <tr className="border-t-2 border-gray-300 bg-gray-50">
+                                          <td colSpan={3} className="px-3 py-3 font-bold text-gray-800">
+                                            Sum-Total
+                                          </td>
+                                          <td className="px-3 py-3 text-right font-bold text-gray-900">
+                                            {formatCurrency(sumBeforeVat)}
+                                          </td>
+                                        </tr>
+                                      </tfoot>
+                                    )}
                                   </table>
                                 </div>
                               </div>
@@ -8321,6 +8438,7 @@ const BNPLBuyNow: React.FC = () => {
                             installationFee > 0 ||
                             inspectionFee > 0 ||
                             materialCost > 0;
+                          const isBnplInvoice = activeTab === "BNPL Orders";
 
                           return (
                             <div className="mb-4 bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
@@ -8330,40 +8448,68 @@ const BNPLBuyNow: React.FC = () => {
                                 </h3>
                               </div>
                               <div className="px-4 py-2">
-                                {row("Item Subtotal", subTotal)}
-                                {discount > 0 &&
-                                  row(`Discount (${discountPct}%)`, discount, {
-                                    prefix: "-",
-                                    valueClass: "text-green-700",
-                                  })}
-                                {row("Net Total", netTotal, { emphasize: true })}
-                                {hasServiceFees && (
+                                {isBnplInvoice ? (
                                   <>
+                                    {/* Match customer BNPL invoice: catalog, fees, Sum-Total, VAT, Grand Total */}
+                                    {row("Item Subtotal (catalog)", subTotal)}
+                                    {hasServiceFees && (
+                                      <>
+                                        <Divider />
+                                        {inspectionFee > 0 &&
+                                          row("Inspection fees", inspectionFee, { prefix: "+" })}
+                                        {deliveryFee > 0 &&
+                                          row("Delivery Fees", deliveryFee, { prefix: "+" })}
+                                        {installationFee > 0 &&
+                                          row("Installation fees", installationFee, {
+                                            prefix: "+",
+                                          })}
+                                      </>
+                                    )}
                                     <Divider />
-                                    {deliveryFee > 0 &&
-                                      row("Delivery Fee", deliveryFee, { prefix: "+" })}
-                                    {installationFee > 0 &&
-                                      row("Installation Fee", installationFee, { prefix: "+" })}
-                                    {inspectionFee > 0 &&
-                                      row("Inspection Fee", inspectionFee, { prefix: "+" })}
-                                    {materialCost > 0 &&
-                                      row("Installation Materials Cost", materialCost, {
+                                    {row("Sum-Total", totalAmount, { emphasize: true })}
+                                    {vatAmount > 0 &&
+                                      row(`VAT (${vatPct}%)`, vatAmount, { prefix: "+" })}
+                                  </>
+                                ) : (
+                                  <>
+                                    {row("Item Subtotal", subTotal)}
+                                    {discount > 0 &&
+                                      row(`Discount (${discountPct}%)`, discount, {
+                                        prefix: "-",
+                                        valueClass: "text-green-700",
+                                      })}
+                                    {row("Net Total", netTotal, { emphasize: true })}
+                                    {hasServiceFees && (
+                                      <>
+                                        <Divider />
+                                        {deliveryFee > 0 &&
+                                          row("Delivery Fee", deliveryFee, { prefix: "+" })}
+                                        {installationFee > 0 &&
+                                          row("Installation Fee", installationFee, {
+                                            prefix: "+",
+                                          })}
+                                        {inspectionFee > 0 &&
+                                          row("Inspection Fee", inspectionFee, { prefix: "+" })}
+                                        {materialCost > 0 &&
+                                          row("Installation Materials Cost", materialCost, {
+                                            prefix: "+",
+                                          })}
+                                      </>
+                                    )}
+                                    <Divider />
+                                    {row("Total Amount", totalAmount, { emphasize: true })}
+                                    {vatAmount > 0 &&
+                                      row(`VAT (${vatPct}% of Total Amount)`, vatAmount, {
                                         prefix: "+",
                                       })}
+                                    {insuranceFee > 0 &&
+                                      row(
+                                        `Insurance Fee (${insurancePct}% of Item Subtotal)`,
+                                        insuranceFee,
+                                        { prefix: "+" }
+                                      )}
                                   </>
                                 )}
-                                <Divider />
-                                {row("Total Amount", totalAmount, { emphasize: true })}
-                                {vatAmount > 0 &&
-                                  row(`VAT (${vatPct}% of Total Amount)`, vatAmount, {
-                                    prefix: "+",
-                                  })}
-                                {insuranceFee > 0 &&
-                                  row(
-                                    `Insurance Fee (${insurancePct}% of Item Subtotal)`,
-                                    insuranceFee,
-                                    { prefix: "+" }
-                                  )}
                                 <Divider />
                                 <div className="flex justify-between items-center py-3">
                                   <span className="font-bold text-base uppercase text-[#273E8E] tracking-wide">
