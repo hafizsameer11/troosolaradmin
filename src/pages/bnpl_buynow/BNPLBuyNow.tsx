@@ -3947,7 +3947,7 @@ const BNPLBuyNow: React.FC = () => {
                             Customer
                           </th>
                           <th className="px-6 py-4 text-left text-sm font-medium text-black">
-                            {activeTab === "BNPL Orders" ? "Financing total" : "Total Price"}
+                            {activeTab === "BNPL Orders" ? "Total Amount" : "Total Price"}
                           </th>
                           <th className="px-6 py-4 text-left text-sm font-medium text-black">
                             Status
@@ -4439,11 +4439,6 @@ const BNPLBuyNow: React.FC = () => {
                             <span
                               className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-full"
                               style={getStatusColor(selectedItem.payment_status)}
-                              title={
-                                activeTab === "BNPL Orders"
-                                  ? "orders.payment_status is set when the customer pays the down payment only — monthly installments are tracked on the Payments tab"
-                                  : undefined
-                              }
                             >
                               {activeTab === "BNPL Orders"
                                 ? bnplOrderDownPaymentPaid(selectedItem)
@@ -4462,34 +4457,16 @@ const BNPLBuyNow: React.FC = () => {
                           )}
                         </div>
                       </div>
-                      {activeTab === "BNPL Orders" && bnplOrderDownPaymentPaid(selectedItem) && (
-                        <p className="text-xs text-gray-600 mb-4 -mt-2">
-                          “Down payment: Paid” means only the initial deposit was collected. Monthly installments
-                          stay open until marked paid on the <span className="font-semibold">Payments</span> tab
-                          (this is not full order payment).
-                        </p>
-                      )}
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
                           <p className="text-xs text-gray-500 mb-1">Order ID</p>
                           <p className="text-sm font-semibold text-gray-900">#{selectedItem.id || "N/A"}</p>
                         </div>
-                        {activeTab === "BNPL Orders" && bnplOrderSystemInvoiceTotal(selectedItem) > 0 && (
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">System invoice (VAT incl.)</p>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {formatCurrency(bnplOrderSystemInvoiceTotal(selectedItem))}
-                            </p>
-                            <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">
-                              Catalog + fees + VAT — same as customer Invoice / Invoice tab
-                            </p>
-                          </div>
-                        )}
                         {selectedItem.total_price && (
                           <div>
                             <p className="text-xs text-gray-500 mb-1">
                               {activeTab === "BNPL Orders"
-                                ? "Financing total"
+                                ? "Total Amount"
                                 : "Total Price"}
                             </p>
                             <p className="text-sm font-semibold text-[#273E8E]">
@@ -4497,21 +4474,16 @@ const BNPLBuyNow: React.FC = () => {
                             </p>
                             {activeTab === "BNPL Orders" && (
                               <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">
-                                From mono loan <span className="font-mono">total_amount</span> →{" "}
-                                <span className="font-mono">orders.total_price</span>: down payment + all
-                                installment repayments (includes interest; higher than system invoice)
+                                Down payment + all installment repayments
                               </p>
                             )}
                           </div>
                         )}
                         {activeTab === "BNPL Orders" && bnplOrderDownPaymentAmount(selectedItem) > 0 && (
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Down payment (paid)</p>
+                            <p className="text-xs text-gray-500 mb-1">Down payment</p>
                             <p className="text-sm font-semibold text-green-700">
                               {formatCurrency(bnplOrderDownPaymentAmount(selectedItem))}
-                            </p>
-                            <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">
-                              What set payment_status to paid — not the full financing total
                             </p>
                           </div>
                         )}
@@ -5171,22 +5143,11 @@ const BNPLBuyNow: React.FC = () => {
                         Order Details
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {activeTab === "BNPL Orders" && bnplOrderSystemInvoiceTotal(selectedItem) > 0 && (
-                          <div className="bg-gray-50 rounded-lg p-4">
-                            <p className="text-xs text-gray-500 mb-1">System invoice (VAT incl.)</p>
-                            <p className="text-lg font-bold text-gray-900">
-                              {formatCurrency(bnplOrderSystemInvoiceTotal(selectedItem))}
-                            </p>
-                            <p className="text-xs text-gray-500 mt-1">
-                              Bundle/catalog + inspection/delivery/installation + VAT
-                            </p>
-                          </div>
-                        )}
                         {selectedItem.total_price && (
                           <div className="bg-gray-50 rounded-lg p-4">
                             <p className="text-xs text-gray-500 mb-1">
                               {activeTab === "BNPL Orders"
-                                ? "Financing total"
+                                ? "Total Amount"
                                 : "Total Price"}
                             </p>
                             <p className="text-lg font-bold text-[#273E8E]">
@@ -5194,9 +5155,7 @@ const BNPLBuyNow: React.FC = () => {
                             </p>
                             {activeTab === "BNPL Orders" && (
                               <p className="text-xs text-gray-500 mt-1">
-                                Down payment + installment repayments (incl. interest). Stored as{" "}
-                                <span className="font-mono">orders.total_price</span> from mono{" "}
-                                <span className="font-mono">total_amount</span>.
+                                Down payment + all installment repayments
                               </p>
                             )}
                           </div>
@@ -5227,7 +5186,7 @@ const BNPLBuyNow: React.FC = () => {
                         )}
                         {activeTab === "BNPL Orders" && (
                           <div className="bg-gray-50 rounded-lg p-4">
-                            <p className="text-xs text-gray-500 mb-1">Down payment only</p>
+                            <p className="text-xs text-gray-500 mb-1">Down payment</p>
                             <p className="text-lg font-bold text-gray-900">
                               {bnplOrderDownPaymentPaid(selectedItem)
                                 ? "Paid"
@@ -5238,9 +5197,6 @@ const BNPLBuyNow: React.FC = () => {
                                 {formatCurrency(bnplOrderDownPaymentAmount(selectedItem))}
                               </p>
                             )}
-                            <p className="text-xs text-gray-500 mt-1">
-                              Installments are not included — see Payments tab
-                            </p>
                           </div>
                         )}
                       </div>
