@@ -575,33 +575,6 @@ function bnplOrderDownPaymentPaid(order: Record<string, unknown> | null | undefi
   );
 }
 
-/**
- * System invoice grand total (catalog + fees + VAT) from the customer's loan plan —
- * NOT orders.total_price (that is financing: down payment + all installment repayments).
- */
-function bnplOrderSystemInvoiceTotal(order: Record<string, unknown> | null | undefined): number {
-  if (!order) return 0;
-  const la = (order.loan_application && typeof order.loan_application === "object"
-    ? (order.loan_application as Record<string, unknown>)
-    : null);
-  const snap = (la?.loan_plan_snapshot && typeof la.loan_plan_snapshot === "object"
-    ? (la.loan_plan_snapshot as Record<string, unknown>)
-    : null);
-  const fromSnap =
-    bnplParseAmountCounter(snap?.invoiceGrandTotal) ||
-    bnplParseAmountCounter(snap?.grandTotal) ||
-    bnplLoanCalculatorTotalFromSnapshotForCounter(snap);
-  if (fromSnap > 0) return fromSnap;
-  const ld = (order.loan_details && typeof order.loan_details === "object"
-    ? (order.loan_details as Record<string, unknown>)
-    : null);
-  return (
-    bnplParseAmountCounter(ld?.invoiceGrandTotal) ||
-    bnplParseAmountCounter(ld?.grandTotal) ||
-    0
-  );
-}
-
 function bnplOrderDownPaymentAmount(order: Record<string, unknown> | null | undefined): number {
   if (!order) return 0;
   const ld = (order.loan_details && typeof order.loan_details === "object"
