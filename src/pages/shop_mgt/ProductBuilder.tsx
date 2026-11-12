@@ -7,6 +7,7 @@ import { addBundle, type CustomAppliancePayload } from '../../utils/mutations/bu
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Cookies from "js-cookie";
 import { getAllProducts } from '../../utils/queries/product';
+import { getSingleBundle } from '../../utils/queries/bundle';
 
 import { updateBundle } from '../../utils/mutations/bundle';
 import { API_DOMAIN } from '../../../apiConfig';
@@ -69,6 +70,11 @@ const ProductBuilder = ({ isOpen, onClose, editingBundle }: ProductBuilderProps)
   const [discountPrice, setDiscountPrice] = useState('');
   const [discountEndDate, setDiscountEndDate] = useState('');
   const [featuredImage, setFeaturedImage] = useState<File | null>(null);
+  const [existingFeaturedPreview, setExistingFeaturedPreview] = useState<string | null>(null);
+  const [galleryImages, setGalleryImages] = useState<File[]>([]);
+  const [existingGallery, setExistingGallery] = useState<Array<{ id: number; url: string }>>([]);
+  const [removeFeaturedImage, setRemoveFeaturedImage] = useState(false);
+  const [removeImageIds, setRemoveImageIds] = useState<number[]>([]);
   const [customServices, setCustomServices] = useState<CustomService[]>([]);
   const [isAddServiceOpen, setIsAddServiceOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -113,11 +119,18 @@ const ProductBuilder = ({ isOpen, onClose, editingBundle }: ProductBuilderProps)
     return apiDomain.replace(/\/api$/, '');
   };
 
-  const getImageUrl = (imagePath: string | null) => {
-    if (!imagePath) return '/assets/images/newman1.png';
-    if (imagePath.startsWith('http')) return imagePath;
+  const getImageUrl = (imagePath: string | null | undefined) => {
+    if (!imagePath) return null;
+    let value = String(imagePath).trim();
+    const abs = value.match(/^https?:\/\/[^/]+(\/.*)$/i);
+    if (abs) value = abs[1];
+    value = value.replace(/^\/storage\/public\//, '/storage/');
+    value = value.replace(/^storage\/public\//, '/storage/');
+    value = value.replace(/^public\//, '');
+    if (value.startsWith('http')) return value;
     const baseUrl = getBaseUrl();
-    return `${baseUrl}${imagePath}`;
+    if (value.startsWith('/')) return `${baseUrl}${value}`;
+    return `${baseUrl}/storage/${value}`;
   };
 
   const handleProductSelect = (product: ApiProduct) => {
@@ -159,36 +172,71 @@ const ProductBuilder = ({ isOpen, onClose, editingBundle }: ProductBuilderProps)
     },
   });
 
-  // Populate form when editing a bundle
-  useEffect(() => {
-    if (editingBundle) {
-      setBundleName(editingBundle.title || "");
-      setBundleType(editingBundle.bundle_type || "");
-      setIsAvailable(editingBundle.is_available !== false);
-      setTopDeal(editingBundle.top_deal === true);
-      setHighlyRecommended(editingBundle.is_most_popular === true);
-      setTotalPrice(editingBundle.total_price ? String(editingBundle.total_price) : "");
-      setDiscountPrice(editingBundle.discount_price ? String(editingBundle.discount_price) : "");
-      setDiscountEndDate(editingBundle.discount_end_date || "");
-      setProductModel(editingBundle.product_model || "");
-      setSystemCapacityDisplay(editingBundle.system_capacity_display || "");
-      setDetailedDescription(editingBundle.detailed_description || "");
-      setWhatIsInsideBundleText(editingBundle.what_is_inside_bundle_text || "");
-      setWhatBundlePowersText(editingBundle.what_bundle_powers_text || "");
-      setBackupTimeDescription(editingBundle.backup_time_description || "");
-      setInverRating(editingBundle.inver_rating || "");
-      setTotalOutput(editingBundle.total_output || "");
-      setTotalLoad(editingBundle.total_load ?? "");
-      setCustomAppliances(editingBundle.custom_appliances || []);
-      if (editingBundle.bundle_items && Array.isArray(editingBundle.bundle_items)) {
-        const productIds = editingBundle.bundle_items.map((item: any) => item.product_id);
-        const selected = availableProducts.filter(p => productIds.includes(p.id));
-        setSelectedProducts(selected);
-      }
-      setCustomServices(editingBundle.custom_services || []);
-    } else {
-      resetForm();
+  const applyBundleToForm = (bundle: any) => {
+    if (!bundle) return;
+    setBundleName(bundle.title || "");
+    setBundleType(bundle.bundle_type || "");
+    setIsAvailable(bundle.is_available !== false);
+    setTopDeal(bundle.top_deal === true);
+    setHighlyRecommended(bundle.is_most_popular === true);
+    setTotalPrice(bundle.total_price ? String(bundle.total_price) : "");
+    setDiscountPrice(bundle.discount_price ? String(bundle.discount_price) : "");
+    setDiscountEndDate(bundle.discount_end_date || "");
+    setProductModel(bundle.product_model || "");
+    setSystemCapacityDisplay(bundle.system_capacity_display || "");
+    setDetailedDescription(bundle.detailed_description || "");
+    setWhatIsInsideBundleText(bundle.what_is_inside_bundle_text || "");
+    setWhatBundlePowersText(bundle.what_bundle_powers_text || "");
+    setBackupTimeDescription(bundle.backup_time_description || "");
+    setInverRating(bundle.inver_rating || "");
+    setTotalOutput(bundle.total_output || "");
+    setTotalLoad(bundle.total_load ?? "");
+    setCustomAppliances(bundle.custom_appliances || []);
+    if (bundle.bundle_items && Array.isArray(bundle.bundle_items)) {
+      const productIds = bundle.bundle_items.map((item: any) => item.product_id);
+      const selected = availableProducts.filter(p => productIds.includes(p.id));
+      setSelectedProducts(selected);
     }
+    setCustomServices(bundle.custom_services || []);
+    setFeaturedImage(null);
+    setRemoveFeaturedImage(false);
+    setRemoveImageIds([]);
+    setGalleryImages([]);
+    setExistingFeaturedPreview(
+      getImageUrl(bundle.featured_image_url || bundle.featured_image || null)
+    );
+    setExistingGallery(
+      (Array.isArray(bundle.images) ? bundle.images : [])
+        .map((img: { id?: number; image?: string; image_url?: string }) => {
+          const url = getImageUrl(img.image_url || img.image);
+          if (!url || !img.id) return null;
+          return { id: Number(img.id), url };
+        })
+        .filter(Boolean) as Array<{ id: number; url: string }>
+    );
+  };
+
+  // Populate form when editing a bundle (refresh from show API so images appear)
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!editingBundle) {
+      resetForm();
+      return;
+    }
+    applyBundleToForm(editingBundle);
+    let cancelled = false;
+    if (editingBundle.id) {
+      getSingleBundle(String(editingBundle.id), token)
+        .then((res) => {
+          if (cancelled) return;
+          const full = (res as any)?.data ?? res;
+          if (full?.id) applyBundleToForm(full);
+        })
+        .catch((e) => console.error('Failed to load full bundle for shop edit', e));
+    }
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line
   }, [editingBundle, isOpen, availableProducts]);
 
@@ -200,7 +248,7 @@ const ProductBuilder = ({ isOpen, onClose, editingBundle }: ProductBuilderProps)
       alert('Please fill in Bundle Name, Bundle Type, and Total Price');
       return;
     }
-    if (!featuredImage && !editingBundle) {
+    if (!featuredImage && !editingBundle && !existingFeaturedPreview) {
       alert('Please select a featured image');
       return;
     }
@@ -216,6 +264,9 @@ const ProductBuilder = ({ isOpen, onClose, editingBundle }: ProductBuilderProps)
       discount_price: discountPrice ? parseFloat(discountPrice) : undefined,
       discount_end_date: discountEndDate || undefined,
       featured_image: featuredImage || undefined,
+      images: galleryImages.length > 0 ? galleryImages : undefined,
+      remove_featured_image: removeFeaturedImage && !featuredImage ? true : undefined,
+      remove_image_ids: removeImageIds.length > 0 ? removeImageIds : undefined,
       items: hasProducts ? selectedProducts.map(p => p.id) : undefined,
       custom_services: customServices.length > 0 ? customServices : undefined,
       product_model: productModel || undefined,
@@ -255,6 +306,11 @@ const ProductBuilder = ({ isOpen, onClose, editingBundle }: ProductBuilderProps)
     setDiscountPrice('');
     setDiscountEndDate('');
     setFeaturedImage(null);
+    setExistingFeaturedPreview(null);
+    setGalleryImages([]);
+    setExistingGallery([]);
+    setRemoveFeaturedImage(false);
+    setRemoveImageIds([]);
     setCustomServices([]);
     setProductModel('');
     setSystemCapacityDisplay('');
@@ -290,7 +346,16 @@ const ProductBuilder = ({ isOpen, onClose, editingBundle }: ProductBuilderProps)
     const file = event.target.files?.[0];
     if (file) {
       setFeaturedImage(file);
+      setRemoveFeaturedImage(false);
     }
+  };
+
+  const handleGalleryUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    if (files.length > 0) {
+      setGalleryImages((prev) => [...prev, ...files].slice(0, 12));
+    }
+    event.target.value = '';
   };
 
   const handleAddCustomService = (e: React.MouseEvent) => {
@@ -384,7 +449,7 @@ const ProductBuilder = ({ isOpen, onClose, editingBundle }: ProductBuilderProps)
                   >
                     <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
                       <img
-                        src={getImageUrl(product.featured_image_url)}
+                        src={getImageUrl(product.featured_image_url) || '/assets/images/newman1.png'}
                         alt={product.title}
                         className="w-full h-full object-cover"
                         onError={(e) => {
@@ -487,41 +552,120 @@ const ProductBuilder = ({ isOpen, onClose, editingBundle }: ProductBuilderProps)
               </label>
             </div>
 
-            {/* Featured Image */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Featured Image *
-              </label>
-              <p className="text-xs text-gray-500 mb-3">Select the main bundle image</p>
+            {/* Featured + Additional Images */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Featured Image {editingBundle ? '' : '*'}
+                </label>
+                <p className="text-xs text-gray-500 mb-3">Select the main bundle image</p>
 
-              <div className="w-full">
-                {featuredImage ? (
-                  <div className="w-32 h-24 border border-gray-300 rounded-lg overflow-hidden relative">
-                    <img
-                      src={URL.createObjectURL(featuredImage)}
-                      alt="Featured Bundle"
-                      className="w-full h-full object-cover"
-                    />
-                    <button
-                      onClick={() => setFeaturedImage(null)}
-                      className="absolute top-0 -right-0 w-4 h-4 bg-red-500 text-white rounded-full text-xs flex items-center justify-center"
-                    >
-                      <span className='mb-1'>×</span>
-                    </button>
-                  </div>
-                ) : (
-                  <label className="w-32 h-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-gray-400">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFeaturedImageUpload}
-                      className="hidden"
-                    />
-                    <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                  </label>
-                )}
+                <div className="w-full">
+                  {featuredImage ? (
+                    <div className="w-32 h-24 border border-gray-300 rounded-lg overflow-hidden relative">
+                      <img
+                        src={URL.createObjectURL(featuredImage)}
+                        alt="Featured Bundle"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFeaturedImage(null)}
+                        className="absolute top-0 -right-0 w-4 h-4 bg-red-500 text-white rounded-full text-xs flex items-center justify-center"
+                      >
+                        <span className='mb-1'>×</span>
+                      </button>
+                    </div>
+                  ) : existingFeaturedPreview && !removeFeaturedImage ? (
+                    <div className="w-32 h-24 border border-gray-300 rounded-lg overflow-hidden relative">
+                      <img
+                        src={existingFeaturedPreview}
+                        alt="Current Featured Bundle"
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute bottom-1 left-1 bg-blue-500 text-white text-xs px-1 rounded">
+                        Current
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setExistingFeaturedPreview(null);
+                          setRemoveFeaturedImage(true);
+                        }}
+                        className="absolute top-0 right-0 w-4 h-4 bg-red-500 text-white rounded-full text-xs flex items-center justify-center"
+                        title="Remove featured image"
+                      >
+                        <span className="mb-1">×</span>
+                      </button>
+                      <label className="absolute -top-1 -left-1 w-4 h-4 bg-blue-500 text-white rounded-full text-xs flex items-center justify-center cursor-pointer hover:bg-blue-600">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFeaturedImageUpload}
+                          className="hidden"
+                        />
+                        +
+                      </label>
+                    </div>
+                  ) : (
+                    <label className="w-32 h-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-gray-400">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFeaturedImageUpload}
+                        className="hidden"
+                      />
+                      <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Additional Images
+                </label>
+                <p className="text-xs text-gray-500 mb-3">Upload multiple pictures for this bundle</p>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleGalleryUpload}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
+                <div className="mt-3 flex flex-wrap gap-3">
+                  {existingGallery.map((img) => (
+                    <div key={img.id} className="relative">
+                      <img src={img.url} alt="Bundle" className="w-20 h-16 object-cover rounded-lg border border-gray-200" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRemoveImageIds((prev) => [...prev, img.id]);
+                          setExistingGallery((prev) => prev.filter((g) => g.id !== img.id));
+                        }}
+                        className="absolute top-0 right-0 w-4 h-4 bg-red-500 text-white rounded-full text-xs flex items-center justify-center"
+                        title="Remove image"
+                      >
+                        <span className="mb-1">×</span>
+                      </button>
+                    </div>
+                  ))}
+                  {galleryImages.map((file, idx) => (
+                    <div key={`new-${idx}`} className="relative">
+                      <img src={URL.createObjectURL(file)} alt="New" className="w-20 h-16 object-cover rounded-lg border border-gray-200" />
+                      <button
+                        type="button"
+                        onClick={() => setGalleryImages((prev) => prev.filter((_, i) => i !== idx))}
+                        className="absolute top-0 right-0 w-4 h-4 bg-red-500 text-white rounded-full text-xs flex items-center justify-center"
+                        title="Remove image"
+                      >
+                        <span className="mb-1">×</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
