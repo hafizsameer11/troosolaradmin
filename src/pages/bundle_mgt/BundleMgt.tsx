@@ -1144,9 +1144,9 @@ const BundleMgt = () => {
                   <th className="px-6 py-4 text-left text-sm font-medium text-black">Title</th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-black">Type</th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-black">Availability</th>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-black">Inverter Rating</th>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-black">Total Output</th>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-black">Total Load</th>
+                  <th className="px-6 py-4 text-left text-sm font-medium text-black">Inverter Rating (kVA)</th>
+                  <th className="px-6 py-4 text-left text-sm font-medium text-black">Battery Capacity (kWh)</th>
+                  <th className="px-6 py-4 text-left text-sm font-medium text-black">Solar Capacity (kWp)</th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-black">Buy Now List</th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-black">Buy Now Sale</th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-black">BNPL List</th>
