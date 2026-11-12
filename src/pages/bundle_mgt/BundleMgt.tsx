@@ -3,6 +3,7 @@ import Header from "../../component/Header";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Cookies from "js-cookie";
 import LoadingSpinner from "../../components/common/LoadingSpinner";
+import { API_ORIGIN } from "../../../apiConfig";
 import { getAllBundles } from "../../utils/queries/bundle";
 import { addBundle, updateBundle, deleteBundle } from "../../utils/mutations/bundle";
 import { getBundleMaterials } from "../../utils/queries/bundleMaterials";
@@ -61,6 +62,7 @@ interface Bundle {
   customServices?: any[];
   featured_image?: string;
   featured_image_url?: string;
+  images?: Array<{ id: number; image?: string; image_url?: string }>;
   detailed_description?: string;
   product_model?: string;
   system_capacity_display?: string;
@@ -147,8 +149,25 @@ const BundleMgt = () => {
   const [specRows, setSpecRows] = useState<{ id: number; key: string; value: string }[]>([]);
   const specDragIdx = React.useRef<number | null>(null);
   const specDragOverIdx = React.useRef<number | null>(null);
+  const getBundleImageUrl = (imagePath: string | null | undefined) => {
+    if (!imagePath) return null;
+    let value = String(imagePath).trim();
+    const abs = value.match(/^https?:\/\/[^/]+(\/.*)$/i);
+    if (abs) value = abs[1];
+    value = value.replace(/^\/storage\/public\//, '/storage/');
+    value = value.replace(/^public\//, '');
+    if (value.startsWith('http')) return value;
+    const base = API_ORIGIN || '';
+    if (value.startsWith('/')) return `${base}${value}`;
+    return `${base}/storage/${value}`;
+  };
+
   const [featuredImage, setFeaturedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [galleryImages, setGalleryImages] = useState<File[]>([]);
+  const [existingGallery, setExistingGallery] = useState<Array<{ id: number; url: string }>>([]);
+  const [removeFeaturedImage, setRemoveFeaturedImage] = useState(false);
+  const [removeImageIds, setRemoveImageIds] = useState<number[]>([]);
 
   // Delete confirmation state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -592,6 +611,10 @@ const BundleMgt = () => {
 
   // Form handlers
   const resetBundleForm = () => {
+    setGalleryImages([]);
+    setExistingGallery([]);
+    setRemoveFeaturedImage(false);
+    setRemoveImageIds([]);
     setBundleFormData({
       title: "",
       bundle_type: bundleTypeOptions[0] || DEFAULT_BUNDLE_TYPES[0],
@@ -665,10 +688,20 @@ const BundleMgt = () => {
         .filter(([, v]) => v !== "" && v != null)
         .map(([k, v], idx) => ({ id: Date.now() + idx, key: k, value: String(v) }));
       setSpecRows(loadedRows);
-      const imgUrl = bundle.featured_image_url || bundle.featured_image || null;
-      if (imgUrl) {
-        setImagePreview(imgUrl);
-      }
+      const imgUrl = getBundleImageUrl(bundle.featured_image_url || bundle.featured_image || null);
+      setRemoveFeaturedImage(false);
+      setRemoveImageIds([]);
+      setGalleryImages([]);
+      setImagePreview(imgUrl);
+      setExistingGallery(
+        (bundle.images || [])
+          .map((img) => {
+            const url = getBundleImageUrl(img.image_url || img.image);
+            if (!url || !img.id) return null;
+            return { id: Number(img.id), url };
+          })
+          .filter(Boolean) as Array<{ id: number; url: string }>
+      );
     } else {
       resetBundleForm();
     }
@@ -691,12 +724,21 @@ const BundleMgt = () => {
     const file = e.target.files?.[0];
     if (file) {
       setFeaturedImage(file);
+      setRemoveFeaturedImage(false);
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleGalleryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length > 0) {
+      setGalleryImages((prev) => [...prev, ...files].slice(0, 12));
+    }
+    e.target.value = "";
   };
 
   const handleBundleSubmit = (e: React.FormEvent) => {
@@ -742,6 +784,9 @@ const BundleMgt = () => {
     payload.specifications = specs;
 
     if (featuredImage) payload.featured_image = featuredImage;
+    if (galleryImages.length > 0) payload.images = galleryImages;
+    if (removeFeaturedImage && !featuredImage) payload.remove_featured_image = true;
+    if (removeImageIds.length > 0) payload.remove_image_ids = removeImageIds;
 
     if (editingBundle) {
       const bundleId = editingBundle.id;
@@ -1674,16 +1719,67 @@ const BundleMgt = () => {
                   </div>
                 </div>
 
-                {/* ── Section 6: Featured Image ── */}
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Featured Image</label>
-                  <input type="file" accept="image/*" onChange={handleImageChange}
-                    className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-                  {imagePreview && (
-                    <div className="mt-2">
-                      <img src={imagePreview} alt="Preview" className="w-32 h-32 object-cover rounded-lg border border-gray-200" />
+                {/* ── Section 6: Images ── */}
+                <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Featured Image (main)</label>
+                    <input type="file" accept="image/*" onChange={handleImageChange}
+                      className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    {imagePreview && !removeFeaturedImage && (
+                      <div className="mt-2 relative inline-block">
+                        <img src={imagePreview} alt="Preview" className="w-32 h-32 object-cover rounded-lg border border-gray-200" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFeaturedImage(null);
+                            setImagePreview(null);
+                            setRemoveFeaturedImage(true);
+                          }}
+                          className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full text-sm"
+                          title="Remove featured image"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Additional Images</label>
+                    <p className="text-xs text-gray-500 mb-2">Upload multiple pictures for this bundle</p>
+                    <input type="file" accept="image/*" multiple onChange={handleGalleryChange}
+                      className="w-full border border-[#CDCDCD] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      {existingGallery.map((img) => (
+                        <div key={img.id} className="relative">
+                          <img src={img.url} alt="Bundle" className="w-24 h-24 object-cover rounded-lg border border-gray-200" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRemoveImageIds((prev) => [...prev, img.id]);
+                              setExistingGallery((prev) => prev.filter((g) => g.id !== img.id));
+                            }}
+                            className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full text-sm"
+                            title="Remove image"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                      {galleryImages.map((file, idx) => (
+                        <div key={`new-${idx}`} className="relative">
+                          <img src={URL.createObjectURL(file)} alt="New" className="w-24 h-24 object-cover rounded-lg border border-gray-200" />
+                          <button
+                            type="button"
+                            onClick={() => setGalleryImages((prev) => prev.filter((_, i) => i !== idx))}
+                            className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full text-sm"
+                            title="Remove image"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  )}
+                  </div>
                 </div>
               </div>
 

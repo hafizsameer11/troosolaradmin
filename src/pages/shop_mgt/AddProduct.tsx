@@ -4,7 +4,7 @@ import images from "../../constants/images";
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import Cookies from "js-cookie";
-import { addProduct, updateProduct } from '../../utils/mutations/products';
+import { addProduct, updateProduct, deleteProductFeaturedImage, deleteProductGalleryImage } from '../../utils/mutations/products';
 import { getAllCategories } from '../../utils/queries/categories';
 import { useQuery } from '@tanstack/react-query';
 import { getAllBrands } from '../../utils/queries/brands';
@@ -57,8 +57,10 @@ const AddProduct = ({ isOpen, onClose, editingProduct }: AddProductProps) => {
   const [productDetails, setProductDetails] = useState<string[]>(['', '', '', '', '']);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [featuredImage, setFeaturedImage] = useState<File | null>(null);
-  const [existingImages, setExistingImages] = useState<string[]>([]);
+  const [existingImages, setExistingImages] = useState<Array<{ id: number; url: string }>>([]);
   const [existingFeaturedImage, setExistingFeaturedImage] = useState<string | null>(null);
+  const [removeFeaturedImage, setRemoveFeaturedImage] = useState(false);
+  const [removeImageIds, setRemoveImageIds] = useState<number[]>([]);
   const [topDeal, setTopDeal] = useState(false);
   const [highlyRecommended, setHighlyRecommended] = useState(false);
   const [markAsComplimentary, setMarkAsComplimentary] = useState(false);
@@ -122,9 +124,16 @@ const AddProduct = ({ isOpen, onClose, editingProduct }: AddProductProps) => {
 
   const getImageUrl = (imagePath: string | null) => {
     if (!imagePath) return null;
-    if (imagePath.startsWith('http')) return imagePath;
+    let value = String(imagePath).trim();
+    const abs = value.match(/^https?:\/\/[^/]+(\/.*)$/i);
+    if (abs) value = abs[1];
+    value = value.replace(/^\/storage\/public\//, '/storage/');
+    value = value.replace(/^storage\/public\//, '/storage/');
+    value = value.replace(/^public\//, '');
+    if (value.startsWith('http')) return value;
     const baseUrl = getBaseUrl();
-    return `${baseUrl}${imagePath}`;
+    if (value.startsWith('/')) return `${baseUrl}${value}`;
+    return `${baseUrl}/storage/${value}`;
   };
 
   // Populate form when editing
@@ -165,8 +174,9 @@ const AddProduct = ({ isOpen, onClose, editingProduct }: AddProductProps) => {
         category_id: number;
         brand_id: number | null;
         details?: Array<{ detail: string }>;
+        featured_image?: string;
         featured_image_url?: string;
-        images?: Array<{ image: string }>;
+        images?: Array<{ id?: number; image?: string; image_url?: string }>;
       };
 
       console.log("➡️ Parsed product for form state:", product);
@@ -206,14 +216,18 @@ const AddProduct = ({ isOpen, onClose, editingProduct }: AddProductProps) => {
         console.log("➡️ Loaded product details:", details);
       }
 
-      setExistingFeaturedImage(getImageUrl(product.featured_image_url || null));
+      setExistingFeaturedImage(getImageUrl(product.featured_image_url || product.featured_image || null));
+      setRemoveFeaturedImage(false);
+      setRemoveImageIds([]);
       if (product.images && product.images.length > 0) {
-        const imageUrls = product.images
-          .map((img) => getImageUrl(img.image))
-          .filter(Boolean) as string[];
-        setExistingImages(imageUrls);
-
-        console.log("➡️ Existing images:", imageUrls);
+        const imageRows = product.images
+          .map((img) => {
+            const url = getImageUrl(img.image_url || img.image || null);
+            if (!url || !img.id) return null;
+            return { id: Number(img.id), url };
+          })
+          .filter(Boolean) as Array<{ id: number; url: string }>;
+        setExistingImages(imageRows);
       } else {
         setExistingImages([]);
       }
@@ -287,14 +301,16 @@ const AddProduct = ({ isOpen, onClose, editingProduct }: AddProductProps) => {
         updatePayload.append("is_available", isAvailable ? "1" : "0");
         updatePayload.append("description", productDescription ?? "");
         updatePayload.append("specifications", productSpecifications ?? "");
-        // Only append featured_image if a new one is selected
         if (featuredImage) updatePayload.append("featured_image", featuredImage);
-        // Only append images if new ones are selected
+        if (removeFeaturedImage && !featuredImage) updatePayload.append("remove_featured_image", "1");
         if (selectedImages.length > 0) {
           selectedImages.forEach((img, idx) => {
             updatePayload.append(`images[${idx}]`, img);
           });
         }
+        removeImageIds.forEach((id, idx) => {
+          updatePayload.append(`remove_image_ids[${idx}]`, String(id));
+        });
         // Always append product_details, even if empty
         productDetails.filter(detail => detail.trim() !== '').forEach((detail, idx) => {
           updatePayload.append(`product_details[${idx}]`, detail);
@@ -411,6 +427,8 @@ const AddProduct = ({ isOpen, onClose, editingProduct }: AddProductProps) => {
     setFeaturedImage(null);
     setExistingImages([]);
     setExistingFeaturedImage(null);
+    setRemoveFeaturedImage(false);
+    setRemoveImageIds([]);
     setTopDeal(false);
     setHighlyRecommended(false);
     setMarkAsComplimentary(false);
@@ -460,7 +478,7 @@ const AddProduct = ({ isOpen, onClose, editingProduct }: AddProductProps) => {
                     <span className='mb-1'>×</span>
                   </button>
                 </div>
-              ) : existingFeaturedImage ? (
+              ) : existingFeaturedImage && !removeFeaturedImage ? (
                 <div className="w-32 h-24 border border-gray-300 rounded-lg overflow-hidden relative">
                   <img
                     src={existingFeaturedImage}
@@ -470,7 +488,26 @@ const AddProduct = ({ isOpen, onClose, editingProduct }: AddProductProps) => {
                   <div className="absolute bottom-1 left-1 bg-blue-500 text-white text-xs px-1 rounded">
                     Current
                   </div>
-                  <label className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white rounded-full text-xs flex items-center justify-center cursor-pointer hover:bg-blue-600">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const product = editingProduct as { id?: number } | undefined;
+                      if (product?.id) {
+                        try {
+                          await deleteProductFeaturedImage(product.id, token);
+                        } catch (e) {
+                          console.error(e);
+                        }
+                      }
+                      setExistingFeaturedImage(null);
+                      setRemoveFeaturedImage(true);
+                    }}
+                    className="absolute top-0 right-0 w-4 h-4 bg-red-500 text-white rounded-full text-xs flex items-center justify-center"
+                    title="Remove image"
+                  >
+                    <span className="mb-1">×</span>
+                  </button>
+                  <label className="absolute -top-1 -left-1 w-4 h-4 bg-blue-500 text-white rounded-full text-xs flex items-center justify-center cursor-pointer hover:bg-blue-600">
                     <input
                       type="file"
                       accept="image/*"
@@ -525,23 +562,33 @@ const AddProduct = ({ isOpen, onClose, editingProduct }: AddProductProps) => {
                   ) : existingImages[index] ? (
                     <div className="w-20 h-16 border border-gray-300 rounded-lg overflow-hidden relative">
                       <img
-                        src={existingImages[index]}
+                        src={existingImages[index].url}
                         alt={`Current Product ${index + 1}`}
                         className="w-full h-full object-cover"
                       />
                       <div className="absolute bottom-0 left-0 bg-blue-500 text-white text-xs px-1 rounded">
                         Current
                       </div>
-                      <label className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white rounded-full text-xs flex items-center justify-center cursor-pointer hover:bg-blue-600">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          onChange={handleImageUpload}
-                          className="hidden"
-                        />
-                        +
-                      </label>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const row = existingImages[index];
+                          const product = editingProduct as { id?: number } | undefined;
+                          if (product?.id && row?.id) {
+                            try {
+                              await deleteProductGalleryImage(product.id, row.id, token);
+                            } catch (e) {
+                              console.error(e);
+                            }
+                            setRemoveImageIds((prev) => [...prev, row.id]);
+                          }
+                          setExistingImages((prev) => prev.filter((_, i) => i !== index));
+                        }}
+                        className="absolute top-0 right-0 w-4 h-4 bg-red-500 text-white rounded-full text-xs flex items-center justify-center"
+                        title="Remove image"
+                      >
+                        <span className="mb-1">×</span>
+                      </button>
                     </div>
                   ) : (
                     <label className="w-20 h-16 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-gray-400">

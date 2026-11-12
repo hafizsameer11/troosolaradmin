@@ -57,6 +57,10 @@ const API_ENDPOINTS = {
     ProductShow: (id: number | string) => `${API_DOMAIN}/products/${id}`, // GET
     ProductUpdate: (id: number | string) => `${API_DOMAIN}/products/${id}/update`, // POST
     ProductDelete: (id: number | string) => `${API_DOMAIN}/products/${id}`, // DELETE
+    ProductDeleteFeaturedImage: (id: number | string) =>
+      `${API_DOMAIN}/products/${id}/featured-image`, // DELETE
+    ProductDeleteGalleryImage: (productId: number | string, imageId: number | string) =>
+      `${API_DOMAIN}/products/${productId}/images/${imageId}`, // DELETE
     ProductReviewsAdminList: (productId?: number | string) =>
       `${API_DOMAIN}/admin/product-reviews${productId ? `?product_id=${productId}` : ""}`, // GET
     ProductReviewAdminUpdate: (id: number | string) =>
@@ -72,6 +76,10 @@ const API_ENDPOINTS = {
     BundleShow: (id: number | string) => `${API_DOMAIN}/bundles/${id}`, // GET
     BundleUpdate: (id: number | string) => `${API_DOMAIN}/bundles/${id}/update`, // POST
     DeleteBundle: (id: number | string) => `${API_DOMAIN}/bundles/${id}`, // DELETE
+    BundleDeleteFeaturedImage: (id: number | string) =>
+      `${API_DOMAIN}/bundles/${id}/featured-image`, // DELETE
+    BundleDeleteGalleryImage: (bundleId: number | string, imageId: number | string) =>
+      `${API_DOMAIN}/bundles/${bundleId}/images/${imageId}`, // DELETE
 
     // --- Bundle Materials ---
     BundleMaterialsList: (bundleId: number | string) =>

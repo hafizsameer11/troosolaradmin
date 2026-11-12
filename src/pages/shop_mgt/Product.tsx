@@ -339,9 +339,16 @@ const Product = () => {
 
   const getImageUrl = (imagePath: string | null) => {
     if (!imagePath) return '/assets/images/newmanbadge.png';
-    if (imagePath.startsWith('http')) return imagePath;
+    let value = String(imagePath).trim();
+    const abs = value.match(/^https?:\/\/[^/]+(\/.*)$/i);
+    if (abs) value = abs[1];
+    value = value.replace(/^\/storage\/public\//, '/storage/');
+    value = value.replace(/^storage\/public\//, '/storage/');
+    value = value.replace(/^public\//, '');
+    if (value.startsWith('http')) return value;
     const baseUrl = getBaseUrl();
-    return `${baseUrl}${imagePath}`;
+    if (value.startsWith('/')) return `${baseUrl}${value}`;
+    return `${baseUrl}/storage/${value}`;
   };
 
   // Filter products based on selected filters and search query

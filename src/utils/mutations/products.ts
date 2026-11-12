@@ -112,5 +112,30 @@ export const deleteProduct = async (
     token
   );
 };
+
+export const deleteProductFeaturedImage = async (
+  id: number | string,
+  token: string
+): Promise<unknown> => {
+  return await apiCall(
+    API_ENDPOINTS.ADMIN.ProductDeleteFeaturedImage(id),
+    "DELETE",
+    undefined,
+    token
+  );
+};
+
+export const deleteProductGalleryImage = async (
+  productId: number | string,
+  imageId: number | string,
+  token: string
+): Promise<unknown> => {
+  return await apiCall(
+    API_ENDPOINTS.ADMIN.ProductDeleteGalleryImage(productId, imageId),
+    "DELETE",
+    undefined,
+    token
+  );
+};
  
 

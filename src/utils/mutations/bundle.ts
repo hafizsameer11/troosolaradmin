@@ -33,6 +33,9 @@ type BundleProductPayload = {
   bnpl_discount_price?: number | null;
   discount_end_date?: string;
   featured_image?: File;
+  images?: File[];
+  remove_featured_image?: boolean;
+  remove_image_ids?: number[];
   items?: number[];
   items_detail?: BundleItemDetail[];
   materials_detail?: BundleMaterialDetail[];
@@ -101,6 +104,19 @@ export const addBundle = async (
   }
   if (data.featured_image) {
     formData.append("featured_image", data.featured_image);
+  }
+  if (data.images && data.images.length > 0) {
+    data.images.forEach((image, index) => {
+      formData.append(`images[${index}]`, image);
+    });
+  }
+  if (data.remove_featured_image) {
+    formData.append("remove_featured_image", "1");
+  }
+  if (data.remove_image_ids && data.remove_image_ids.length > 0) {
+    data.remove_image_ids.forEach((id, index) => {
+      formData.append(`remove_image_ids[${index}]`, String(id));
+    });
   }
 
   if (data.items_detail && data.items_detail.length > 0) {
@@ -202,6 +218,19 @@ export const updateBundle = async (
   }
   if (data.featured_image) {
     formData.append("featured_image", data.featured_image);
+  }
+  if (data.images && data.images.length > 0) {
+    data.images.forEach((image, index) => {
+      formData.append(`images[${index}]`, image);
+    });
+  }
+  if (data.remove_featured_image) {
+    formData.append("remove_featured_image", "1");
+  }
+  if (data.remove_image_ids && data.remove_image_ids.length > 0) {
+    data.remove_image_ids.forEach((id, index) => {
+      formData.append(`remove_image_ids[${index}]`, String(id));
+    });
   }
 
   if (data.items_detail && data.items_detail.length > 0) {
