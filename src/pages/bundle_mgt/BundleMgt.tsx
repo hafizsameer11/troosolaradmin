@@ -644,68 +644,82 @@ const BundleMgt = () => {
     setEditingBundle(null);
   };
 
-  const handleOpenBundleModal = (bundle?: Bundle) => {
+  const populateBundleForm = (bundle: Bundle) => {
+    setEditingBundle(bundle);
+    const brandId = bundle.brand_id ?? bundle.brand?.id ?? "";
+    const sp = bundle.specifications ?? {};
+    const list = bundle.total_price;
+    const sale = buyNowSalePrice(list, bundle.discount_price || 0);
+    const amountOff = discountAmountOff(list, sale);
+    const percentOff = discountPercentOff(list, sale);
+    const bnplList = bundle.bnpl_price || 0;
+    const bnplSale = buyNowSalePrice(bnplList, bundle.bnpl_discount_price || 0);
+    const bnplAmountOff = discountAmountOff(bnplList, bnplSale);
+    const bnplPercentOff = discountPercentOff(bnplList, bnplSale);
+    setBundleFormData({
+      title: bundle.title,
+      bundle_type: bundle.bundle_type,
+      is_available: bundle.is_available !== false,
+      brand_id: brandId,
+      total_price: bundle.total_price.toString(),
+      discount_price: amountOff > 0 ? sale.toString() : "",
+      discount_percent: percentOff > 0 ? percentOff.toString() : "",
+      discount_amount_off: amountOff > 0 ? amountOff.toString() : "",
+      bnpl_price: bnplList > 0 ? bnplList.toString() : "",
+      bnpl_discount_price: bnplAmountOff > 0 ? bnplSale.toString() : "",
+      bnpl_discount_percent: bnplPercentOff > 0 ? bnplPercentOff.toString() : "",
+      bnpl_discount_amount_off: bnplAmountOff > 0 ? bnplAmountOff.toString() : "",
+      inver_rating: bundle.inver_rating || "",
+      total_output: bundle.total_output || "",
+      total_load: bundle.total_load || "",
+      system_capacity_display: bundle.system_capacity_display || "",
+      description: bundle.detailed_description || "",
+      product_model: bundle.product_model || "",
+      what_is_inside: bundle.what_is_inside_bundle_text || "",
+      what_it_powers: bundle.what_bundle_powers_text || "",
+      backup_time_description: bundle.backup_time_description || "",
+    });
+    if (bundle.bundle_type && !bundleTypeOptions.includes(bundle.bundle_type)) {
+      setBundleTypeOptions((prev) => [...prev, bundle.bundle_type]);
+    }
+    const loadedRows = Object.entries(sp)
+      .filter(([, v]) => v !== "" && v != null)
+      .map(([k, v], idx) => ({ id: Date.now() + idx, key: k, value: String(v) }));
+    setSpecRows(loadedRows);
+    setFeaturedImage(null);
+    setRemoveFeaturedImage(false);
+    setRemoveImageIds([]);
+    setGalleryImages([]);
+    setImagePreview(getBundleImageUrl(bundle.featured_image_url || bundle.featured_image || null));
+    setExistingGallery(
+      (bundle.images || [])
+        .map((img) => {
+          const url = getBundleImageUrl(img.image_url || img.image);
+          if (!url || !img.id) return null;
+          return { id: Number(img.id), url };
+        })
+        .filter(Boolean) as Array<{ id: number; url: string }>
+    );
+  };
+
+  const handleOpenBundleModal = async (bundle?: Bundle) => {
     if (bundle) {
-      setEditingBundle(bundle);
-      const brandId = bundle.brand_id ?? bundle.brand?.id ?? "";
-      const sp = bundle.specifications ?? {};
-      const list = bundle.total_price;
-      const sale = buyNowSalePrice(list, bundle.discount_price || 0);
-      const amountOff = discountAmountOff(list, sale);
-      const percentOff = discountPercentOff(list, sale);
-      const bnplList = bundle.bnpl_price || 0;
-      const bnplSale = buyNowSalePrice(bnplList, bundle.bnpl_discount_price || 0);
-      const bnplAmountOff = discountAmountOff(bnplList, bnplSale);
-      const bnplPercentOff = discountPercentOff(bnplList, bnplSale);
-      setBundleFormData({
-        title: bundle.title,
-        bundle_type: bundle.bundle_type,
-        is_available: bundle.is_available !== false,
-        brand_id: brandId,
-        total_price: bundle.total_price.toString(),
-        discount_price: amountOff > 0 ? sale.toString() : "",
-        discount_percent: percentOff > 0 ? percentOff.toString() : "",
-        discount_amount_off: amountOff > 0 ? amountOff.toString() : "",
-        bnpl_price: bnplList > 0 ? bnplList.toString() : "",
-        bnpl_discount_price: bnplAmountOff > 0 ? bnplSale.toString() : "",
-        bnpl_discount_percent: bnplPercentOff > 0 ? bnplPercentOff.toString() : "",
-        bnpl_discount_amount_off: bnplAmountOff > 0 ? bnplAmountOff.toString() : "",
-        inver_rating: bundle.inver_rating || "",
-        total_output: bundle.total_output || "",
-        total_load: bundle.total_load || "",
-        system_capacity_display: bundle.system_capacity_display || "",
-        description: bundle.detailed_description || "",
-        product_model: bundle.product_model || "",
-        what_is_inside: bundle.what_is_inside_bundle_text || "",
-        what_it_powers: bundle.what_bundle_powers_text || "",
-        backup_time_description: bundle.backup_time_description || "",
-      });
-      if (bundle.bundle_type && !bundleTypeOptions.includes(bundle.bundle_type)) {
-        setBundleTypeOptions((prev) => [...prev, bundle.bundle_type]);
+      // Prefill immediately from list row, then refresh from show API so images load.
+      populateBundleForm(bundle);
+      setShowBundleModal(true);
+      try {
+        const res = await getSingleBundle(String(bundle.id), token);
+        const full = ((res as any)?.data ?? res) as Bundle;
+        if (full?.id) {
+          populateBundleForm(full);
+        }
+      } catch (e) {
+        console.error("Failed to load full bundle for edit", e);
       }
-      // Load specifications as dynamic key-value rows
-      const loadedRows = Object.entries(sp)
-        .filter(([, v]) => v !== "" && v != null)
-        .map(([k, v], idx) => ({ id: Date.now() + idx, key: k, value: String(v) }));
-      setSpecRows(loadedRows);
-      const imgUrl = getBundleImageUrl(bundle.featured_image_url || bundle.featured_image || null);
-      setRemoveFeaturedImage(false);
-      setRemoveImageIds([]);
-      setGalleryImages([]);
-      setImagePreview(imgUrl);
-      setExistingGallery(
-        (bundle.images || [])
-          .map((img) => {
-            const url = getBundleImageUrl(img.image_url || img.image);
-            if (!url || !img.id) return null;
-            return { id: Number(img.id), url };
-          })
-          .filter(Boolean) as Array<{ id: number; url: string }>
-      );
     } else {
       resetBundleForm();
+      setShowBundleModal(true);
     }
-    setShowBundleModal(true);
   };
 
   const handleAddBundleType = () => {
